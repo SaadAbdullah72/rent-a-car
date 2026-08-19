@@ -317,7 +317,7 @@ app.post('/api/investors', requireMongo, async (req, res) => {
       const updated = await Investor.findByIdAndUpdate(
         existing._id,
         { $set: updateData },
-        { new: true, runValidators: false }
+        { returnDocument: 'after', runValidators: false }
       );
       return res.json({ message: 'Investor updated in MongoDB!', investor: updated });
     }
@@ -337,16 +337,16 @@ app.post('/api/investors', requireMongo, async (req, res) => {
 app.put('/api/investors/:id', requireMongo, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, cnic, phone, vehicles } = req.body;
+    const updateData = { ...req.body };
+    delete updateData._id;
+    delete updateData.__v;
 
-    const updateData = {};
-    if (name) updateData.name = name.trim();
-    if (cnic) updateData.cnic = cnic.trim();
-    if (phone !== undefined) updateData.phone = phone.trim();
-    if (vehicles) updateData.vehicles = vehicles;
+    if (updateData.name) updateData.name = updateData.name.trim();
+    if (updateData.cnic) updateData.cnic = updateData.cnic.trim();
+    if (updateData.phone !== undefined) updateData.phone = updateData.phone.trim();
 
     const query = { $or: [ ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []), { id: id }, { cnic: id } ] };
-    const updated = await Investor.findOneAndUpdate(query, { $set: updateData }, { new: true, runValidators: false });
+    const updated = await Investor.findOneAndUpdate(query, { $set: updateData }, { returnDocument: 'after', runValidators: false });
     if (!updated) return res.status(404).json({ error: 'Investor not found' });
     return res.json({ message: 'Investor updated!', investor: updated });
   } catch (err) {
@@ -397,8 +397,12 @@ app.post('/api/customer-rentals', requireMongo, async (req, res) => {
 app.put('/api/customer-rentals/:id', requireMongo, async (req, res) => {
   try {
     const { id } = req.params;
+    const updateData = { ...req.body };
+    delete updateData._id;
+    delete updateData.__v;
+
     const query = { $or: [ ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []), { id: id }, { customerCnic: id } ] };
-    const updated = await CustomerRental.findOneAndUpdate(query, { $set: req.body }, { new: true, runValidators: false });
+    const updated = await CustomerRental.findOneAndUpdate(query, { $set: updateData }, { returnDocument: 'after', runValidators: false });
     if (!updated) return res.status(404).json({ error: 'Customer rental not found' });
     return res.json({ message: 'Customer rental updated!', rental: updated });
   } catch (err) {
@@ -449,8 +453,12 @@ app.post('/api/maintenance', requireMongo, async (req, res) => {
 app.put('/api/maintenance/:id', requireMongo, async (req, res) => {
   try {
     const { id } = req.params;
+    const updateData = { ...req.body };
+    delete updateData._id;
+    delete updateData.__v;
+
     const query = { $or: [ ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []), { id: id } ] };
-    const updated = await MaintenanceRecord.findOneAndUpdate(query, { $set: req.body }, { new: true, runValidators: false });
+    const updated = await MaintenanceRecord.findOneAndUpdate(query, { $set: updateData }, { returnDocument: 'after', runValidators: false });
     if (!updated) return res.status(404).json({ error: 'Maintenance record not found' });
     return res.json({ message: 'Maintenance record updated!', record: updated });
   } catch (err) {
