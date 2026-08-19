@@ -151,25 +151,47 @@ const CustomerRental = mongoose.models.CustomerRental || mongoose.model('Custome
 const MaintenanceRecord = mongoose.models.MaintenanceRecord || mongoose.model('MaintenanceRecord', MaintenanceSchema);
 
 let isMongoReady = false;
+let cached = global.mongoose;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
 
-// Connect to MongoDB Atlas
+// Connect to MongoDB Atlas (Optimized for Serverless Lambdas)
 const connectMongo = async () => {
-  if (mongoose.connection.readyState === 1) {
-    isMongoReady = true;
-    return;
-  }
-  try {
-    await mongoose.connect(MONGODB_URI, {
-      serverSelectionTimeoutMS: 8000,
-      socketTimeoutMS: 45000,
-    });
-    isMongoReady = true;
-    console.log('✅ MongoDB Atlas CONNECTED!');
-    await autoSeedDatabase();
-  } catch (err) {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
     isMongoReady = false;
-    console.error('❌ MongoDB connection FAILED:', err.message);
+    throw new Error('MONGODB_URI is not set in Environment Variables.');
   }
+
+  if (cached.conn && mongoose.connection.readyState === 1) {
+    isMongoReady = true;
+    return cached.conn;
+  }
+
+  if (!cached.promise) {
+    const opts = {
+      bufferCommands: false,
+      serverSelectionTimeoutMS: 6000,
+      socketTimeoutMS: 30000,
+    };
+    cached.promise = mongoose.connect(uri, opts).then((m) => {
+      isMongoReady = true;
+      console.log('✅ MongoDB Atlas CONNECTED!');
+      autoSeedDatabase().catch(() => {});
+      return m;
+    });
+  }
+
+  try {
+    cached.conn = await cached.promise;
+    isMongoReady = true;
+  } catch (e) {
+    cached.promise = null;
+    isMongoReady = false;
+    throw e;
+  }
+  return cached.conn;
 };
 
 mongoose.connection.on('connected', () => { isMongoReady = true; });
@@ -192,18 +214,17 @@ const autoSeedDatabase = async () => {
 
 // Middleware: check MongoDB is ready before any API call
 const requireMongo = async (req, res, next) => {
-  if (mongoose.connection.readyState !== 1) {
-    try {
-      await connectMongo();
-    } catch (e) {}
-  }
-  if (!isMongoReady || mongoose.connection.readyState !== 1) {
+  try {
+    await connectMongo();
+    next();
+  } catch (err) {
+    console.error('MongoDB Connection Error:', err.message);
     return res.status(503).json({
-      error: 'MongoDB not connected. Please whitelist your IP in MongoDB Atlas → Network Access → Add 0.0.0.0/0',
+      error: `Database connection error: ${err.message}`,
+      hint: 'Please check MONGODB_URI in Vercel Environment Variables and ensure 0.0.0.0/0 is added in MongoDB Atlas Network Access.',
       dbStatus: 'DISCONNECTED'
     });
   }
-  next();
 };
 
 const findDocSafely = async (Model, id) => {
