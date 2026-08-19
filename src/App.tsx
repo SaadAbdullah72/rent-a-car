@@ -162,6 +162,9 @@ export function App() {
   } | null>(null);
 
 
+  // --- SAVING STATE (button spinner) ---
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+
   // --- DATABASE BACKUP & DISASTER RECOVERY STATE ---
   const [showBackupModal, setShowBackupModal] = useState<boolean>(false);
   const [backupRestoreLoading, setBackupRestoreLoading] = useState<boolean>(false);
@@ -224,10 +227,11 @@ export function App() {
     return Array.from(map.values());
   }, [investorRecords, customerRentals]);
 
-  // Load Data on Mount
+  // Load Data on Mount — also pre-warms the Vercel serverless function
   useEffect(() => {
     async function loadData() {
       try {
+        // Fire all 3 fetches in parallel (first call also warms up serverless)
         const [invData, custData, maintData] = await Promise.all([
           StorageService.fetchInvestorsFromMongo(),
           StorageService.fetchCustomerRentalsFromMongo(),
@@ -241,6 +245,8 @@ export function App() {
         setDbConnected(true);
       } catch (e) {
         setDbConnected(false);
+        // Still try a health warm-up so subsequent saves are fast
+        fetch('/api/health').catch(() => {});
       }
     }
     loadData();
@@ -356,36 +362,21 @@ export function App() {
       createdAt: new Date().toISOString()
     };
 
-    // 1. Save to MongoDB FIRST
-    const result = await StorageService.saveInvestorToMongo(record);
-    if (!result.success) {
-      showNotification(`MongoDB Save Error: ${result.error}. Check DB connection!`, 'error');
-      return;
-    }
+    setIsSaving(true);
 
-    // 2. Refresh data from MongoDB to get actual DB state
-    await refreshAllData();
+    // 1. OPTIMISTIC UI — add to local state + show success popup immediately
+    setInvestorRecords(prev => [record as any, ...prev]);
 
-    // 3. Clear form inputs
+    // 2. Clear form immediately so user can enter next record
     setInvName('');
     setInvCnic('');
     setInvPhone('');
-    setInvVehicles([
-      {
-        carNameModel: '',
-        carPlateNumber: '',
-        startDate: todayIso,
-        endDate: todayIso,
-        totalDays: 1,
-        payoutAmount: 0,
-        advancePaid: 0,
-        balanceDue: 0,
-        paymentStatus: 'PENDING',
-        notes: ''
-      }
-    ]);
+    setInvVehicles([{
+      carNameModel: '', carPlateNumber: '', startDate: todayIso, endDate: todayIso,
+      totalDays: 1, payoutAmount: 0, advancePaid: 0, balanceDue: 0, paymentStatus: 'PENDING', notes: ''
+    }]);
 
-    // 4. Trigger Formal Registration Success Modal
+    // 3. Show success popup RIGHT NOW (no waiting for DB)
     setShowSuccessModal({
       title: 'New Investor Registered Successfully!',
       subtitle: 'Investor record and fleet deposit details have been recorded.',
@@ -397,6 +388,18 @@ export function App() {
         { label: 'Registered Vehicles', value: `${record.vehicles.length} Vehicle(s) (${record.vehicles.map(v => `${v.carNameModel} [${v.carPlateNumber}]`).join(', ')})` }
       ]
     });
+
+    // 4. Save to MongoDB in background (user sees popup while this runs)
+    StorageService.saveInvestorToMongo(record)
+      .then(result => {
+        if (!result.success) {
+          showNotification(`DB Sync Warning: ${result.error}`, 'error');
+        }
+        // Silently refresh to get server-assigned _id
+        refreshAllData().catch(() => {});
+      })
+      .catch(() => showNotification('Network error — record may not have saved.', 'error'))
+      .finally(() => setIsSaving(false));
   };
 
   // Toggle Investor Vehicle Payment Status (PENDING <-> PAID FULL)
@@ -459,29 +462,18 @@ export function App() {
       createdAt: new Date().toISOString()
     };
 
-    // 1. Save to MongoDB FIRST
-    const result = await StorageService.saveCustomerRentalToMongo(record);
-    if (!result.success) {
-      showNotification(`MongoDB Save Error: ${result.error}. Check DB connection!`, 'error');
-      return;
-    }
+    setIsSaving(true);
 
-    // 2. Refresh data from MongoDB to get actual DB state
-    await refreshAllData();
+    // OPTIMISTIC UI: add to local state immediately
+    setCustomerRentals(prev => [record as any, ...prev]);
 
-    // 3. Clear form inputs
-    setCustName('');
-    setCustCnic('');
-    setCustPhone('');
-    setCustCarNameModel('');
-    setCustCarPlateNumber('');
-    setCustStartDate(todayIso);
-    setCustEndDate(todayIso);
-    setCustTotalPrice('');
-    setCustAdvancePaid('');
-    setCustNotes('');
+    // Clear form immediately
+    setCustName(''); setCustCnic(''); setCustPhone('');
+    setCustCarNameModel(''); setCustCarPlateNumber('');
+    setCustStartDate(todayIso); setCustEndDate(todayIso);
+    setCustTotalPrice(''); setCustAdvancePaid(''); setCustNotes('');
 
-    // 4. Trigger Formal Registration Success Modal
+    // Show success popup RIGHT NOW
     setShowSuccessModal({
       title: 'Customer Rental Booking Confirmed!',
       subtitle: 'Vehicle rental agreement and customer balance ledger recorded.',
@@ -493,6 +485,15 @@ export function App() {
         { label: 'Total Rent / Balance Due', value: `Rs. ${record.totalPrice.toLocaleString()} (Due: Rs. ${record.balanceDue.toLocaleString()})` }
       ]
     });
+
+    // Save to MongoDB in background
+    StorageService.saveCustomerRentalToMongo(record)
+      .then(result => {
+        if (!result.success) showNotification(`DB Sync Warning: ${result.error}`, 'error');
+        refreshAllData().catch(() => {});
+      })
+      .catch(() => showNotification('Network error — record may not have saved.', 'error'))
+      .finally(() => setIsSaving(false));
   };
 
   // Toggle Customer Rental Payment Status (PENDING <-> PAID FULL)
@@ -560,28 +561,18 @@ export function App() {
       createdAt: new Date().toISOString()
     };
 
-    // 1. Save to MongoDB FIRST
-    const result = await StorageService.saveMaintenanceToMongo(log);
-    if (!result.success) {
-      showNotification(`MongoDB Save Error: ${result.error}. Check DB connection!`, 'error');
-      return;
-    }
+    setIsSaving(true);
 
-    // 2. Refresh data from MongoDB to get actual DB state
-    await refreshAllData();
+    // OPTIMISTIC UI: add to local state immediately
+    setMaintenanceLogs(prev => [log as any, ...prev]);
 
-    // 3. Clear form inputs
-    setMaintSelectedPlate('');
-    setMaintCarNameModel('');
-    setMaintServiceType('Oil & Filters Change');
-    setMaintCustomServiceType('');
-    setMaintServiceDate(todayIso);
-    setMaintCost('');
-    setMaintVendorName('');
-    setMaintOdometer('');
-    setMaintDescription('');
+    // Clear form immediately
+    setMaintSelectedPlate(''); setMaintCarNameModel('');
+    setMaintServiceType('Oil & Filters Change'); setMaintCustomServiceType('');
+    setMaintServiceDate(todayIso); setMaintCost('');
+    setMaintVendorName(''); setMaintOdometer(''); setMaintDescription('');
 
-    // 4. Trigger Formal Registration Success Modal
+    // Show success popup RIGHT NOW
     setShowSuccessModal({
       title: 'Vehicle Maintenance Log Saved!',
       subtitle: 'Maintenance expense and service details have been logged.',
@@ -593,6 +584,15 @@ export function App() {
         { label: 'Workshop Vendor', value: log.vendorName || 'N/A' }
       ]
     });
+
+    // Save to MongoDB in background
+    StorageService.saveMaintenanceToMongo(log)
+      .then(result => {
+        if (!result.success) showNotification(`DB Sync Warning: ${result.error}`, 'error');
+        refreshAllData().catch(() => {});
+      })
+      .catch(() => showNotification('Network error — record may not have saved.', 'error'))
+      .finally(() => setIsSaving(false));
   };
 
 
@@ -612,19 +612,33 @@ export function App() {
     const { type, data } = editingModal;
     const id = data._id || data.id;
 
+    // Close modal immediately (optimistic)
+    setEditingModal(null);
+
+    // Update local state optimistically
     if (type === 'investor') {
-      await StorageService.updateInvestorToMongo(id, data);
-      showNotification(`Investor record "${data.name}" updated successfully!`);
+      setInvestorRecords(prev => prev.map(r => (r._id || r.id) === id ? { ...r, ...data } : r));
     } else if (type === 'customer') {
-      await StorageService.updateCustomerRentalToMongo(id, data);
-      showNotification(`Customer rental record for "${data.customerName}" updated!`);
+      setCustomerRentals(prev => prev.map(r => (r._id || r.id) === id ? { ...r, ...data } : r));
     } else if (type === 'maintenance') {
-      await StorageService.updateMaintenanceToMongo(id, data);
-      showNotification(`Maintenance record for "${data.carPlateNumber}" updated!`);
+      setMaintenanceLogs(prev => prev.map(r => (r._id || r.id) === id ? { ...r, ...data } : r));
     }
 
-    setEditingModal(null);
-    await refreshAllData();
+    // Show notification immediately
+    if (type === 'investor') showNotification(`Investor "${data.name}" updated!`);
+    else if (type === 'customer') showNotification(`Rental for "${data.customerName}" updated!`);
+    else if (type === 'maintenance') showNotification(`Maintenance record for "${data.carPlateNumber}" updated!`);
+
+    // Sync to DB in background
+    const syncPromise =
+      type === 'investor'    ? StorageService.updateInvestorToMongo(id, data) :
+      type === 'customer'    ? StorageService.updateCustomerRentalToMongo(id, data) :
+                               StorageService.updateMaintenanceToMongo(id, data);
+
+    syncPromise
+      .then(result => { if (!result.success) showNotification(`Sync warning: ${result.error}`, 'error'); })
+      .catch(() => showNotification('Network error during save.', 'error'))
+      .finally(() => refreshAllData().catch(() => {}));
   };
 
   // --- DATABASE BACKUP & RESTORE HANDLERS ---
