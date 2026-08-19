@@ -982,21 +982,12 @@ export function App() {
               </p>
             </div>
 
-            <div className="pt-2 flex flex-wrap items-center justify-center gap-3 font-serif">
+            <div className="pt-2 font-serif">
               <button
                 onClick={() => setShowLoginModal(true)}
                 className="btn-executive px-10 py-4 bg-slate-900/90 text-white border border-slate-700 font-bold text-base rounded-xl hover:bg-slate-900 transition duration-200 font-serif shadow-2xl backdrop-blur-md"
               >
                 Launch Software
-              </button>
-
-              <button
-                onClick={handleInstallDesktopApp}
-                title="Create a direct desktop shortcut and install as PC desktop app"
-                className="btn-executive px-6 py-4 bg-blue-900/90 hover:bg-blue-950 text-white border border-blue-600 font-bold text-base rounded-xl transition duration-200 font-serif shadow-2xl backdrop-blur-md flex items-center gap-2"
-              >
-                <span className="text-xl">💻</span>
-                <span>Install Desktop App</span>
               </button>
             </div>
 
@@ -1100,15 +1091,6 @@ export function App() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 self-start md:self-center font-serif">
-                  <button
-                    onClick={handleInstallDesktopApp}
-                    title="Install Desktop App Shortcut on your PC"
-                    className="px-3 py-1.5 bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs rounded font-serif shadow-xs transition flex items-center gap-1.5"
-                  >
-                    <span>💻</span>
-                    <span>Desktop App</span>
-                  </button>
-
                   <button
                     onClick={handleExportBackup}
                     className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded font-serif shadow-xs transition"
