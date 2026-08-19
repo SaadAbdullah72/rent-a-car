@@ -8,7 +8,7 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://saad489254_db_user:L01RRbdjLgZwrONE@cluster0.uu0bq93.mongodb.net/investor_registry?retryWrites=true&w=majority";
+const MONGODB_URI = process.env.MONGODB_URI;
 
 // Secure Admin Credentials from Environment
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'falah87t';
