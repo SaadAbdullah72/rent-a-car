@@ -174,8 +174,51 @@ export function App() {
   const [custSearchTerm, setCustSearchTerm] = useState('');
   const [maintSearchTerm, setMaintSearchTerm] = useState('');
 
+  // --- PWA DESKTOP APP INSTALL STATE ---
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isAppInstalled, setIsAppInstalled] = useState<boolean>(false);
+
   // Notification Banner
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4500);
+  };
+
+  // PWA Desktop App Install Event Listener
+  useEffect(() => {
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    const handleInstalled = () => {
+      setIsAppInstalled(true);
+      setDeferredPrompt(null);
+      showNotification('Al-Falah Rent A Car desktop app shortcut installed on your PC!', 'success');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleInstalled);
+    };
+  }, []);
+
+  const handleInstallDesktopApp = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        showNotification('App installed successfully! Desktop shortcut created on your PC.', 'success');
+      }
+      setDeferredPrompt(null);
+    } else {
+      showNotification('Click the (💻 / ⊕ Install App) icon in your browser address bar at the top-right to install!', 'success');
+    }
+  };
 
   // Helper for Auto-Days calculation
   const calculateDays = (startStr: string, endStr: string) => {
@@ -252,10 +295,6 @@ export function App() {
     loadData();
   }, []);
 
-  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
-    setNotification({ message, type });
-    setTimeout(() => setNotification(null), 4500);
-  };
 
   // Refresh All Data from MongoDB
   const refreshAllData = async () => {
@@ -943,12 +982,21 @@ export function App() {
               </p>
             </div>
 
-            <div className="pt-2 font-serif">
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-3 font-serif">
               <button
                 onClick={() => setShowLoginModal(true)}
                 className="btn-executive px-10 py-4 bg-slate-900/90 text-white border border-slate-700 font-bold text-base rounded-xl hover:bg-slate-900 transition duration-200 font-serif shadow-2xl backdrop-blur-md"
               >
                 Launch Software
+              </button>
+
+              <button
+                onClick={handleInstallDesktopApp}
+                title="Create a direct desktop shortcut and install as PC desktop app"
+                className="btn-executive px-6 py-4 bg-blue-900/90 hover:bg-blue-950 text-white border border-blue-600 font-bold text-base rounded-xl transition duration-200 font-serif shadow-2xl backdrop-blur-md flex items-center gap-2"
+              >
+                <span className="text-xl">💻</span>
+                <span>Install Desktop App</span>
               </button>
             </div>
 
@@ -1052,6 +1100,15 @@ export function App() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 self-start md:self-center font-serif">
+                  <button
+                    onClick={handleInstallDesktopApp}
+                    title="Install Desktop App Shortcut on your PC"
+                    className="px-3 py-1.5 bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs rounded font-serif shadow-xs transition flex items-center gap-1.5"
+                  >
+                    <span>💻</span>
+                    <span>Desktop App</span>
+                  </button>
+
                   <button
                     onClick={handleExportBackup}
                     className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded font-serif shadow-xs transition"

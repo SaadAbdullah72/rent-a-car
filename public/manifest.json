@@ -1,0 +1,26 @@
+{
+  "name": "Al-Falah Rent A Car",
+  "short_name": "Al-Falah",
+  "description": "Al-Falah Rent A Car Enterprise Fleet & Financial Management Portal",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512 any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons.svg",
+      "sizes": "192x192 512x512 any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "finance", "productivity"]
+}
