@@ -1205,10 +1205,15 @@ export function App() {
             <form onSubmit={handleInvestorSubmit} className="space-y-6 text-xs font-serif">
               
               {/* Investor Personal Details */}
-              <div className="p-4 bg-[#faf9f5] border border-slate-200 rounded-lg space-y-4 font-serif">
-                <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide border-b border-slate-200 pb-2 font-serif">
-                  A. Investor Identification Credentials
-                </h3>
+              <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
+                    A
+                  </span>
+                  <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
+                    Investor Identification Credentials
+                  </h3>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-serif">
                   <div>
@@ -1258,33 +1263,43 @@ export function App() {
               </div>
 
               {/* Multi-Vehicle Array */}
-              <div className="space-y-4 font-serif">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2 font-serif">
-                  <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
-                    B. Deposited Vehicles ({invVehicles.length} Vehicle{invVehicles.length > 1 ? 's' : ''})
-                  </h3>
+              <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-5 font-serif">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-3 font-serif">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
+                      B
+                    </span>
+                    <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
+                      Deposited Vehicles ({invVehicles.length} Vehicle{invVehicles.length > 1 ? 's' : ''})
+                    </h3>
+                  </div>
 
                   <button
                     type="button"
                     onClick={handleAddInvVehicle}
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded font-bold text-xs transition font-serif"
+                    className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-xs shadow-sm transition font-serif flex items-center gap-1.5"
                   >
-                    + Add Another Vehicle
+                    <span>+</span> Add Another Vehicle
                   </button>
                 </div>
 
                 {invVehicles.map((v, index) => (
-                  <div key={index} className="p-4 bg-[#faf9f5] border border-slate-300 rounded-lg space-y-4 font-serif">
-                    <div className="flex items-center justify-between border-b border-slate-200 pb-2 font-serif">
-                      <span className="font-bold text-slate-900 text-xs uppercase font-serif">
-                        Vehicle #{index + 1} Entry Details
-                      </span>
+                  <div key={index} className="p-5 bg-white border-2 border-indigo-200/90 rounded-xl shadow-sm space-y-4 font-serif hover:border-indigo-300 transition-all">
+                    <div className="flex items-center justify-between border-b border-indigo-100 pb-2.5 font-serif">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-md bg-indigo-900 text-white font-bold text-[11px] uppercase tracking-wider">
+                          Vehicle #{index + 1}
+                        </span>
+                        <span className="font-bold text-slate-800 text-xs uppercase font-serif">
+                          Entry Details & Financials
+                        </span>
+                      </div>
 
                       {invVehicles.length > 1 && (
                         <button
                           type="button"
                           onClick={() => handleRemoveInvVehicle(index)}
-                          className="text-xs font-bold text-rose-800 hover:bg-rose-100 bg-rose-50 px-2.5 py-1 border border-rose-200 rounded font-serif transition"
+                          className="text-xs font-bold text-rose-800 hover:bg-rose-100 bg-rose-50 px-3 py-1 border border-rose-200 rounded-md font-serif transition"
                         >
                           Remove Vehicle #{index + 1}
                         </button>
@@ -1352,7 +1367,7 @@ export function App() {
                         <label className="block text-slate-700 font-bold mb-1 font-serif">
                           Auto Duration (Days)
                         </label>
-                        <div className="p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold text-xs text-center font-serif">
+                        <div className="p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-950 font-bold text-xs text-center font-serif shadow-inner">
                           {v.totalDays} Day{v.totalDays > 1 ? 's' : ''}
                         </div>
                       </div>
@@ -1395,7 +1410,7 @@ export function App() {
                         <label className="block text-slate-700 font-bold mb-1 font-serif">
                           Remaining Left Due to Investor (Rs.)
                         </label>
-                        <div className="p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold text-sm text-center font-serif">
+                        <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-amber-950 font-bold text-sm text-center font-serif shadow-inner">
                           Rs. {(v.balanceDue !== undefined ? v.balanceDue : Math.max(0, (v.payoutAmount || 0) - (v.advancePaid || 0))).toLocaleString()}
                         </div>
                       </div>
@@ -1651,10 +1666,16 @@ export function App() {
 
             <form onSubmit={handleCustomerSubmit} className="space-y-6 text-xs font-serif">
               
-              <div className="p-4 bg-[#faf9f5] border border-slate-200 rounded-lg space-y-4 font-serif">
-                <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide border-b border-slate-200 pb-2 font-serif">
-                  A. Customer Identification
-                </h3>
+              {/* Section A: Customer Identification */}
+              <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
+                    A
+                  </span>
+                  <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
+                    Customer Identification & Contact
+                  </h3>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-serif">
                   <div>
@@ -1703,10 +1724,16 @@ export function App() {
                 </div>
               </div>
 
-              <div className="p-4 bg-[#faf9f5] border border-slate-200 rounded-lg space-y-4 font-serif">
-                <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide border-b border-slate-200 pb-2 font-serif">
-                  B. Vehicle Rented Out Details
-                </h3>
+              {/* Section B: Vehicle Rented Out Details */}
+              <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
+                    B
+                  </span>
+                  <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
+                    Vehicle Rented Out Details
+                  </h3>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-serif">
                   <div>
@@ -1739,13 +1766,19 @@ export function App() {
                 </div>
               </div>
 
-              <div className="p-4 bg-[#faf9f5] border border-slate-200 rounded-lg space-y-4 font-serif">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2 font-serif">
-                  <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
-                    C. Rental Period & Duration
-                  </h3>
+              {/* Section C: Rental Period & Duration */}
+              <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2.5 font-serif">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
+                      C
+                    </span>
+                    <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
+                      Rental Period & Duration
+                    </h3>
+                  </div>
 
-                  <span className="px-3 py-1 bg-slate-900 text-white rounded text-xs font-bold font-serif">
+                  <span className="px-3 py-1 bg-indigo-900 text-white rounded-lg text-xs font-bold font-serif shadow-sm">
                     Auto Duration: {calculatedCustDays} Day{calculatedCustDays > 1 ? 's' : ''}
                   </span>
                 </div>
@@ -1779,10 +1812,16 @@ export function App() {
                 </div>
               </div>
 
-              <div className="p-4 bg-[#faf9f5] border border-slate-200 rounded-lg space-y-4 font-serif">
-                <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide border-b border-slate-200 pb-2 font-serif">
-                  D. Rental Charges & Payment Accounting (Rs.)
-                </h3>
+              {/* Section D: Rental Charges & Payment Accounting */}
+              <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
+                    D
+                  </span>
+                  <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
+                    Rental Charges & Payment Accounting (Rs.)
+                  </h3>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-serif">
                   <div>
@@ -1820,7 +1859,7 @@ export function App() {
                     <label className="block text-slate-700 font-bold mb-1 font-serif">
                       Auto Balance Due from Customer (Rs.)
                     </label>
-                    <div className="p-2.5 bg-white border border-slate-300 rounded-lg text-rose-800 font-bold text-base font-serif">
+                    <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-amber-950 font-bold text-base text-center font-serif shadow-inner">
                       Rs. {calculatedCustBalance.toLocaleString()}
                     </div>
                   </div>
@@ -1828,11 +1867,11 @@ export function App() {
 
                 <div>
                   <label className="block text-slate-700 font-bold mb-1 font-serif">
-                    Rental Booking Remarks & Notes (Optional)
+                    Rental Condition Notes / Agreement Remarks
                   </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Destination, security held, or special conditions..."
+                  <input
+                    type="text"
+                    placeholder="e.g. Daily limit 250km, fuel returned full..."
                     value={custNotes}
                     onChange={(e) => setCustNotes(e.target.value)}
                     className="w-full custom-input font-serif"
@@ -2038,10 +2077,16 @@ export function App() {
 
             <form onSubmit={handleMaintenanceSubmit} className="space-y-6 text-xs font-serif">
               
-              <div className="p-4 bg-[#faf9f5] border border-slate-200 rounded-lg space-y-4 font-serif">
-                <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide border-b border-slate-200 pb-2 font-serif">
-                  A. Select Fleet Vehicle
-                </h3>
+              {/* Section A: Select Fleet Vehicle */}
+              <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
+                    A
+                  </span>
+                  <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
+                    Select Fleet Vehicle
+                  </h3>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-serif">
                   <div>
@@ -2091,10 +2136,16 @@ export function App() {
                 </div>
               </div>
 
-              <div className="p-4 bg-[#faf9f5] border border-slate-200 rounded-lg space-y-4 font-serif">
-                <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide border-b border-slate-200 pb-2 font-serif">
-                  B. Service Category & Repair Specifications
-                </h3>
+              {/* Section B: Service Category & Repair Specifications */}
+              <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
+                    B
+                  </span>
+                  <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
+                    Service Category & Repair Specifications
+                  </h3>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-serif">
                   <div>
@@ -2129,8 +2180,8 @@ export function App() {
                 </div>
 
                 {maintServiceType === 'Other Repair (Custom Detail)' && (
-                  <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg space-y-2 font-serif">
-                    <label className="block text-amber-900 font-bold font-serif">
+                  <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-2 font-serif shadow-sm">
+                    <label className="block text-amber-950 font-bold font-serif text-xs">
                       Specify Custom Repair Detail * (Describe work done)
                     </label>
                     <input
@@ -2145,10 +2196,16 @@ export function App() {
                 )}
               </div>
 
-              <div className="p-4 bg-[#faf9f5] border border-slate-200 rounded-lg space-y-4 font-serif">
-                <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide border-b border-slate-200 pb-2 font-serif">
-                  C. Maintenance Expense & Workshop Details (Rs.)
-                </h3>
+              {/* Section C: Maintenance Expense & Workshop Details */}
+              <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
+                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
+                    C
+                  </span>
+                  <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
+                    Maintenance Expense & Workshop Details (Rs.)
+                  </h3>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-serif">
                   <div>
@@ -2201,7 +2258,7 @@ export function App() {
                   </label>
                   <textarea
                     rows={2}
-                    placeholder="List replaced parts, invoice numbers, or warranty terms..."
+                    placeholder="Details of parts changed, oil grade used, mechanic contact, warranty..."
                     value={maintDescription}
                     onChange={(e) => setMaintDescription(e.target.value)}
                     className="w-full custom-input font-serif"
