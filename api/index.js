@@ -103,7 +103,7 @@ const VehicleSchema = new mongoose.Schema({
   balanceDue: { type: Number, default: 0 },
   paymentStatus: { type: String, default: 'PENDING' },
   notes: { type: String, default: '' }
-});
+}, { versionKey: false });
 
 const InvestorSchema = new mongoose.Schema({
   id: { type: String, index: true },
@@ -112,7 +112,7 @@ const InvestorSchema = new mongoose.Schema({
   phone: { type: String, default: '' },
   vehicles: [VehicleSchema],
   createdAt: { type: String, default: () => new Date().toISOString() }
-}, { timestamps: false });
+}, { timestamps: false, versionKey: false });
 
 const CustomerRentalSchema = new mongoose.Schema({
   id: { type: String, index: true },
@@ -130,7 +130,7 @@ const CustomerRentalSchema = new mongoose.Schema({
   paymentStatus: { type: String, default: 'PENDING' },
   notes: { type: String, default: '' },
   createdAt: { type: String, default: () => new Date().toISOString() }
-}, { timestamps: false });
+}, { timestamps: false, versionKey: false });
 
 const MaintenanceSchema = new mongoose.Schema({
   id: { type: String, index: true },
@@ -144,7 +144,7 @@ const MaintenanceSchema = new mongoose.Schema({
   odometer: { type: Number, default: 0 },
   description: { type: String, default: '' },
   createdAt: { type: String, default: () => new Date().toISOString() }
-}, { timestamps: false });
+}, { timestamps: false, versionKey: false });
 
 const Investor = mongoose.models.Investor || mongoose.model('Investor', InvestorSchema);
 const CustomerRental = mongoose.models.CustomerRental || mongoose.model('CustomerRental', CustomerRentalSchema);
@@ -283,22 +283,27 @@ app.post('/api/investors', requireMongo, async (req, res) => {
     const { name, cnic, phone, vehicles, id, createdAt } = req.body;
     if (!name || !cnic) return res.status(400).json({ error: 'Name and CNIC required.' });
 
-    let existing = await Investor.findOne({ $or: [{ cnic: cnic.trim() }, ...(id ? [{ id }] : [])] });
+    const trimmedCnic = cnic.trim();
+    const updateData = {
+      name: name.trim(),
+      cnic: trimmedCnic,
+      phone: phone ? phone.trim() : '',
+      vehicles: Array.isArray(vehicles) ? vehicles : []
+    };
+
+    let existing = await Investor.findOne({ $or: [{ cnic: trimmedCnic }, ...(id ? [{ id }] : [])] });
     if (existing) {
-      existing.name = name.trim();
-      existing.cnic = cnic.trim();
-      existing.phone = phone ? phone.trim() : existing.phone;
-      existing.vehicles = Array.isArray(vehicles) ? vehicles : existing.vehicles;
-      await existing.save();
-      return res.json({ message: 'Investor updated in MongoDB!', investor: existing });
+      const updated = await Investor.findByIdAndUpdate(
+        existing._id,
+        { $set: updateData },
+        { new: true, runValidators: false }
+      );
+      return res.json({ message: 'Investor updated in MongoDB!', investor: updated });
     }
 
     const newInv = new Investor({
       id: id || `inv-${Date.now()}`,
-      name: name.trim(),
-      cnic: cnic.trim(),
-      phone: phone ? phone.trim() : '',
-      vehicles: Array.isArray(vehicles) ? vehicles : [],
+      ...updateData,
       createdAt: createdAt || new Date().toISOString()
     });
     await newInv.save();
@@ -311,16 +316,18 @@ app.post('/api/investors', requireMongo, async (req, res) => {
 app.put('/api/investors/:id', requireMongo, async (req, res) => {
   try {
     const { id } = req.params;
-    let doc = await findDocSafely(Investor, id);
-    if (!doc) return res.status(404).json({ error: 'Investor not found' });
-
     const { name, cnic, phone, vehicles } = req.body;
-    if (name) doc.name = name.trim();
-    if (cnic) doc.cnic = cnic.trim();
-    if (phone !== undefined) doc.phone = phone.trim();
-    if (vehicles) doc.vehicles = vehicles;
-    await doc.save();
-    return res.json({ message: 'Investor updated!', investor: doc });
+
+    const updateData = {};
+    if (name) updateData.name = name.trim();
+    if (cnic) updateData.cnic = cnic.trim();
+    if (phone !== undefined) updateData.phone = phone.trim();
+    if (vehicles) updateData.vehicles = vehicles;
+
+    const query = { $or: [ ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []), { id: id }, { cnic: id } ] };
+    const updated = await Investor.findOneAndUpdate(query, { $set: updateData }, { new: true, runValidators: false });
+    if (!updated) return res.status(404).json({ error: 'Investor not found' });
+    return res.json({ message: 'Investor updated!', investor: updated });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -329,12 +336,8 @@ app.put('/api/investors/:id', requireMongo, async (req, res) => {
 app.delete('/api/investors/:id', requireMongo, async (req, res) => {
   try {
     const { id } = req.params;
-    let doc = await findDocSafely(Investor, id);
-    if (doc) {
-      await doc.deleteOne();
-    } else {
-      await Investor.deleteOne({ $or: [{ id }, { cnic: id }] });
-    }
+    const query = { $or: [ ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []), { id: id }, { cnic: id } ] };
+    await Investor.deleteOne(query);
     return res.json({ message: 'Deleted' });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -373,12 +376,10 @@ app.post('/api/customer-rentals', requireMongo, async (req, res) => {
 app.put('/api/customer-rentals/:id', requireMongo, async (req, res) => {
   try {
     const { id } = req.params;
-    let doc = await findDocSafely(CustomerRental, id);
-    if (!doc) return res.status(404).json({ error: 'Customer rental not found' });
-
-    Object.assign(doc, req.body);
-    await doc.save();
-    return res.json({ message: 'Customer rental updated!', rental: doc });
+    const query = { $or: [ ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []), { id: id }, { customerCnic: id } ] };
+    const updated = await CustomerRental.findOneAndUpdate(query, { $set: req.body }, { new: true, runValidators: false });
+    if (!updated) return res.status(404).json({ error: 'Customer rental not found' });
+    return res.json({ message: 'Customer rental updated!', rental: updated });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -387,12 +388,8 @@ app.put('/api/customer-rentals/:id', requireMongo, async (req, res) => {
 app.delete('/api/customer-rentals/:id', requireMongo, async (req, res) => {
   try {
     const { id } = req.params;
-    let doc = await findDocSafely(CustomerRental, id);
-    if (doc) {
-      await doc.deleteOne();
-    } else {
-      await CustomerRental.deleteOne({ id });
-    }
+    const query = { $or: [ ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []), { id: id }, { customerCnic: id } ] };
+    await CustomerRental.deleteOne(query);
     return res.json({ message: 'Deleted' });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -431,12 +428,10 @@ app.post('/api/maintenance', requireMongo, async (req, res) => {
 app.put('/api/maintenance/:id', requireMongo, async (req, res) => {
   try {
     const { id } = req.params;
-    let doc = await findDocSafely(MaintenanceRecord, id);
-    if (!doc) return res.status(404).json({ error: 'Maintenance record not found' });
-
-    Object.assign(doc, req.body);
-    await doc.save();
-    return res.json({ message: 'Maintenance record updated!', record: doc });
+    const query = { $or: [ ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []), { id: id } ] };
+    const updated = await MaintenanceRecord.findOneAndUpdate(query, { $set: req.body }, { new: true, runValidators: false });
+    if (!updated) return res.status(404).json({ error: 'Maintenance record not found' });
+    return res.json({ message: 'Maintenance record updated!', record: updated });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -445,12 +440,8 @@ app.put('/api/maintenance/:id', requireMongo, async (req, res) => {
 app.delete('/api/maintenance/:id', requireMongo, async (req, res) => {
   try {
     const { id } = req.params;
-    let doc = await findDocSafely(MaintenanceRecord, id);
-    if (doc) {
-      await doc.deleteOne();
-    } else {
-      await MaintenanceRecord.deleteOne({ id });
-    }
+    const query = { $or: [ ...(mongoose.Types.ObjectId.isValid(id) ? [{ _id: id }] : []), { id: id } ] };
+    await MaintenanceRecord.deleteOne(query);
     return res.json({ message: 'Deleted' });
   } catch (err) {
     return res.status(500).json({ error: err.message });
