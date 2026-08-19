@@ -3,10 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "description": "Al-Falah Rent A Car Enterprise Fleet, Rentals & Financial Ledger Portal",
-  "type": "module",
+
   "scripts": {
     "dev": "vite",
-    "dev:server": "node api/index.js",
+    "dev:server": "node -r dotenv/config api/index.js",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
