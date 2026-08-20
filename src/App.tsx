@@ -120,6 +120,8 @@ export function App() {
   const [custPhone, setCustPhone] = useState('');
   const [custCarNameModel, setCustCarNameModel] = useState('');
   const [custCarPlateNumber, setCustCarPlateNumber] = useState('');
+  const [custCarSearchQuery, setCustCarSearchQuery] = useState('');
+  const [custCarAvailabilityFilter, setCustCarAvailabilityFilter] = useState<'all' | 'available' | 'rented'>('all');
   const [custStartDate, setCustStartDate] = useState(todayIso);
   const [custEndDate, setCustEndDate] = useState(todayIso);
   const [custTotalPrice, setCustTotalPrice] = useState('');
@@ -270,26 +272,69 @@ export function App() {
     return Array.from(map.values());
   }, [investorRecords, customerRentals]);
 
-  // List of All Active Vehicles Registered by Investors Only (Strict Rule)
+  // List of All Active Vehicles Registered by Investors Only with Live Availability Status
   const investorFleetVehicles = useMemo(() => {
-    const list: { plate: string; model: string; investorName: string; investorCnic: string }[] = [];
+    const list: {
+      plate: string;
+      model: string;
+      investorName: string;
+      investorCnic: string;
+      investorPhone: string;
+      isCurrentlyRented: boolean;
+      currentRentalCustomer: string | null;
+      currentRentalDates: string | null;
+    }[] = [];
+
     investorRecords.forEach(inv => {
       if (inv.vehicles && Array.isArray(inv.vehicles)) {
         inv.vehicles.forEach(v => {
           if (v.carPlateNumber) {
             const cleanPlate = v.carPlateNumber.trim().toUpperCase();
+            
+            // Check if this vehicle is currently rented today
+            const activeRentals = customerRentals.filter(
+              r => r.carPlateNumber?.trim().toUpperCase() === cleanPlate
+            );
+            const activeNow = activeRentals.find(r => {
+              if (!r.startDate || !r.endDate) return false;
+              return todayIso >= r.startDate && todayIso <= r.endDate;
+            });
+
             list.push({
               plate: cleanPlate,
               model: v.carNameModel || 'Vehicle',
               investorName: inv.name,
-              investorCnic: inv.cnic
+              investorCnic: inv.cnic,
+              investorPhone: inv.phone || '',
+              isCurrentlyRented: !!activeNow,
+              currentRentalCustomer: activeNow ? activeNow.customerName : null,
+              currentRentalDates: activeNow ? `${activeNow.startDate} to ${activeNow.endDate}` : null
             });
           }
         });
       }
     });
     return list;
-  }, [investorRecords]);
+  }, [investorRecords, customerRentals, todayIso]);
+
+  // Live Filtered Search for Customer Vehicle Picker
+  const filteredInvestorFleet = useMemo(() => {
+    const q = custCarSearchQuery.toLowerCase().trim();
+    return investorFleetVehicles.filter(v => {
+      // 1. Availability filter
+      if (custCarAvailabilityFilter === 'available' && v.isCurrentlyRented) return false;
+      if (custCarAvailabilityFilter === 'rented' && !v.isCurrentlyRented) return false;
+
+      // 2. Query search
+      if (!q) return true;
+      return (
+        v.plate.toLowerCase().includes(q) ||
+        v.model.toLowerCase().includes(q) ||
+        v.investorName.toLowerCase().includes(q) ||
+        v.investorCnic.toLowerCase().includes(q)
+      );
+    });
+  }, [investorFleetVehicles, custCarSearchQuery, custCarAvailabilityFilter]);
 
   const handleSelectInvestorCarForRental = (plate: string) => {
     setCustCarPlateNumber(plate);
@@ -1808,7 +1853,7 @@ export function App() {
                 </div>
               </div>
 
-              {/* Section B: Vehicle Rented Out Details (Strict Investor Fleet Integration) */}
+              {/* Section B: Searchable Investor Fleet Vehicle Picker */}
               <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
                 <div className="flex items-center justify-between border-b border-slate-200 pb-2.5 font-serif">
                   <div className="flex items-center gap-2.5">
@@ -1834,80 +1879,179 @@ export function App() {
                       Customer ko gari book karwane ke liye pehle <strong>Tab 1 (+ Register Investor)</strong> mein jaa kar Investor aur uski Gari register karna lazmi hai.
                     </p>
                   </div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-serif">
-                      <div>
-                        <label className="block text-slate-700 font-bold mb-1 font-serif">
-                          Select Registered Vehicle from Investor Fleet *
-                        </label>
-                        <select
-                          required
-                          value={custCarPlateNumber}
-                          onChange={(e) => handleSelectInvestorCarForRental(e.target.value)}
-                          className="w-full custom-input font-bold uppercase font-serif"
-                        >
-                          <option value="">-- Choose Registered Fleet Vehicle --</option>
-                          {investorFleetVehicles.map((v, idx) => (
-                            <option key={idx} value={v.plate}>
-                              {v.plate} — {v.model} (Owner: {v.investorName})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-700 font-bold mb-1 font-serif">
-                          Auto-Selected Vehicle Plate Number *
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          readOnly
-                          placeholder="e.g. LEA-2024-88 (Auto-Filled)"
-                          value={custCarPlateNumber}
-                          className="w-full custom-input font-bold uppercase font-serif bg-slate-100 cursor-not-allowed text-slate-900"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-700 font-bold mb-1 font-serif">
-                        Auto-Selected Vehicle Make & Model Name
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        readOnly
-                        placeholder="e.g. Toyota Corolla Altis Grande (Auto-Filled)"
-                        value={custCarNameModel}
-                        className="w-full custom-input font-bold font-serif bg-slate-100 cursor-not-allowed text-slate-900"
-                      />
-                    </div>
-
-                    {/* Investor Ownership Info Card */}
-                    {custCarPlateNumber && (() => {
-                      const found = investorFleetVehicles.find(v => v.plate === custCarPlateNumber);
-                      if (!found) return null;
-                      return (
-                        <div className="p-3.5 bg-emerald-50 border-2 border-emerald-300 rounded-xl text-emerald-950 text-xs font-serif flex flex-wrap items-center justify-between gap-2 shadow-xs">
+                ) : custCarPlateNumber ? (
+                  /* --- 1. SELECTED VEHICLE DISPLAY CARD --- */
+                  (() => {
+                    const found = investorFleetVehicles.find(v => v.plate === custCarPlateNumber);
+                    return (
+                      <div className="p-4 bg-emerald-50 border-2 border-emerald-400 rounded-xl space-y-3 font-serif shadow-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200 pb-2.5">
                           <div className="flex items-center gap-2">
-                            <span className="text-base">✅</span>
+                            <span className="text-xl">✅</span>
                             <div>
-                              <span className="font-bold text-slate-800">Verified Fleet Car: </span>
-                              <span className="font-bold text-emerald-900">{found.model}</span>
-                              <span className="ml-1.5 px-2 py-0.5 bg-emerald-900 text-white rounded text-[10px] font-bold uppercase">{found.plate}</span>
+                              <span className="font-bold text-slate-900 text-sm">{custCarNameModel || found?.model}</span>
+                              <span className="ml-2 px-2.5 py-0.5 bg-slate-900 text-white rounded font-bold text-xs uppercase tracking-wider">
+                                {custCarPlateNumber}
+                              </span>
                             </div>
                           </div>
-                          <div className="text-slate-700 text-xs">
-                            <span className="font-bold text-slate-800">Deposited By Investor: </span>
-                            <span className="font-bold text-emerald-900">{found.investorName}</span>
-                            <span className="text-slate-500 ml-1">({found.investorCnic})</span>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustCarPlateNumber('');
+                              setCustCarNameModel('');
+                            }}
+                            className="px-3 py-1 bg-white border border-emerald-400 text-emerald-950 hover:bg-emerald-100 rounded-lg text-xs font-bold font-serif transition shadow-xs flex items-center gap-1"
+                          >
+                            <span>🔁</span> Change / Search Another Vehicle
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                          <div className="p-2 bg-white/80 border border-emerald-200 rounded-lg">
+                            <span className="text-slate-500 font-bold block text-[11px]">Deposited By Investor:</span>
+                            <span className="font-bold text-slate-900">{found?.investorName || 'Registered Investor'}</span>
+                          </div>
+                          <div className="p-2 bg-white/80 border border-emerald-200 rounded-lg">
+                            <span className="text-slate-500 font-bold block text-[11px]">Investor CNIC:</span>
+                            <span className="font-bold text-slate-900">{found?.investorCnic || 'N/A'}</span>
+                          </div>
+                          <div className="p-2 bg-white/80 border border-emerald-200 rounded-lg">
+                            <span className="text-slate-500 font-bold block text-[11px]">Current Fleet Status:</span>
+                            {found?.isCurrentlyRented ? (
+                              <span className="font-bold text-amber-800 flex items-center gap-1">
+                                <span>🟡</span> Currently on rental ({found.currentRentalCustomer})
+                              </span>
+                            ) : (
+                              <span className="font-bold text-emerald-800 flex items-center gap-1">
+                                <span>🟢</span> Available for Immediate Booking
+                              </span>
+                            )}
                           </div>
                         </div>
-                      );
-                    })()}
-                  </>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  /* --- 2. SEARCH & VEHICLE PICKER INTERFACE --- */
+                  <div className="space-y-3 font-serif">
+                    {/* Search Input & Quick Filter Pills */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          placeholder="🔍 Search vehicle by Plate (e.g. LEA), Model (e.g. Corolla), or Investor Name..."
+                          value={custCarSearchQuery}
+                          onChange={(e) => setCustCarSearchQuery(e.target.value)}
+                          className="w-full custom-input font-serif font-bold text-xs pl-3 pr-8"
+                        />
+                        {custCarSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setCustCarSearchQuery('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 font-bold text-xs"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Filter Buttons */}
+                      <div className="flex items-center gap-1 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setCustCarAvailabilityFilter('all')}
+                          className={`px-2.5 py-1.5 rounded-lg font-bold transition text-xs ${
+                            custCarAvailabilityFilter === 'all'
+                              ? 'bg-slate-900 text-white shadow-xs'
+                              : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          All ({investorFleetVehicles.length})
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setCustCarAvailabilityFilter('available')}
+                          className={`px-2.5 py-1.5 rounded-lg font-bold transition text-xs flex items-center gap-1 ${
+                            custCarAvailabilityFilter === 'available'
+                              ? 'bg-emerald-800 text-white shadow-xs'
+                              : 'bg-white border border-slate-300 text-emerald-800 hover:bg-emerald-50'
+                          }`}
+                        >
+                          <span>🟢</span> Available ({investorFleetVehicles.filter(v => !v.isCurrentlyRented).length})
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setCustCarAvailabilityFilter('rented')}
+                          className={`px-2.5 py-1.5 rounded-lg font-bold transition text-xs flex items-center gap-1 ${
+                            custCarAvailabilityFilter === 'rented'
+                              ? 'bg-amber-800 text-white shadow-xs'
+                              : 'bg-white border border-slate-300 text-amber-800 hover:bg-amber-50'
+                          }`}
+                        >
+                          <span>🟡</span> On Rent ({investorFleetVehicles.filter(v => v.isCurrentlyRented).length})
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Scrollable Vehicle Cards List */}
+                    <div className="max-h-72 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                      {filteredInvestorFleet.length === 0 ? (
+                        <div className="p-4 bg-white border border-slate-200 rounded-xl text-center text-slate-500 font-serif text-xs">
+                          No registered vehicles match your search "{custCarSearchQuery}". Clear search to view all cars.
+                        </div>
+                      ) : (
+                        filteredInvestorFleet.map((v, idx) => (
+                          <div
+                            key={idx}
+                            className="p-3.5 bg-white border border-slate-200 hover:border-indigo-400 rounded-xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2.5 py-0.5 rounded bg-slate-900 text-white font-bold text-xs uppercase tracking-wider">
+                                  {v.plate}
+                                </span>
+                                <span className="font-bold text-slate-900 text-xs">
+                                  {v.model}
+                                </span>
+                                {v.isCurrentlyRented ? (
+                                  <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">
+                                    🟡 On Rental
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-bold">
+                                    🟢 Available Now
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="text-slate-600 text-[11px] flex flex-wrap items-center gap-x-3">
+                                <span>
+                                  <strong>Investor:</strong> {v.investorName} ({v.investorCnic})
+                                </span>
+                                {v.isCurrentlyRented && (
+                                  <span className="text-amber-800 font-semibold">
+                                    Rented to {v.currentRentalCustomer} ({v.currentRentalDates})
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleSelectInvestorCarForRental(v.plate)}
+                              className="self-start sm:self-center px-4 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs rounded-lg transition shadow-xs flex items-center gap-1 shrink-0"
+                            >
+                              <span>👉</span> Select This Car
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
 
