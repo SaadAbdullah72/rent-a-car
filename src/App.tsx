@@ -270,6 +270,37 @@ export function App() {
     return Array.from(map.values());
   }, [investorRecords, customerRentals]);
 
+  // List of All Active Vehicles Registered by Investors Only (Strict Rule)
+  const investorFleetVehicles = useMemo(() => {
+    const list: { plate: string; model: string; investorName: string; investorCnic: string }[] = [];
+    investorRecords.forEach(inv => {
+      if (inv.vehicles && Array.isArray(inv.vehicles)) {
+        inv.vehicles.forEach(v => {
+          if (v.carPlateNumber) {
+            const cleanPlate = v.carPlateNumber.trim().toUpperCase();
+            list.push({
+              plate: cleanPlate,
+              model: v.carNameModel || 'Vehicle',
+              investorName: inv.name,
+              investorCnic: inv.cnic
+            });
+          }
+        });
+      }
+    });
+    return list;
+  }, [investorRecords]);
+
+  const handleSelectInvestorCarForRental = (plate: string) => {
+    setCustCarPlateNumber(plate);
+    const found = investorFleetVehicles.find(v => v.plate === plate);
+    if (found) {
+      setCustCarNameModel(found.model);
+    } else {
+      setCustCarNameModel('');
+    }
+  };
+
   // Load Data on Mount — also pre-warms the Vercel serverless function
   useEffect(() => {
     async function loadData() {
@@ -474,8 +505,22 @@ export function App() {
   const handleCustomerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!custName.trim() || !custCnic.trim() || !custCarNameModel.trim() || !custCarPlateNumber.trim()) {
-      showNotification('Please fill in Customer Name, CNIC, Vehicle Name, and Plate Number.', 'error');
+    if (!custName.trim() || !custCnic.trim()) {
+      showNotification('Please fill in Customer Name and CNIC.', 'error');
+      return;
+    }
+
+    if (!custCarPlateNumber.trim() || !custCarNameModel.trim()) {
+      showNotification('Please select a registered vehicle from the Investor Fleet.', 'error');
+      return;
+    }
+
+    const isCarInInvestorFleet = investorFleetVehicles.some(
+      v => v.plate.toUpperCase() === custCarPlateNumber.trim().toUpperCase()
+    );
+
+    if (!isCarInInvestorFleet && investorFleetVehicles.length > 0) {
+      showNotification(`Vehicle [${custCarPlateNumber}] is not registered by any Investor! Please select a vehicle from the Investor Fleet.`, 'error');
       return;
     }
 
@@ -1763,46 +1808,107 @@ export function App() {
                 </div>
               </div>
 
-              {/* Section B: Vehicle Rented Out Details */}
+              {/* Section B: Vehicle Rented Out Details (Strict Investor Fleet Integration) */}
               <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
-                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
-                    B
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2.5 font-serif">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
+                      B
+                    </span>
+                    <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
+                      Select Vehicle from Investor Fleet (Mandatory)
+                    </h3>
+                  </div>
+
+                  <span className="px-2.5 py-0.5 rounded bg-slate-900 text-white font-bold text-[11px] font-serif">
+                    {investorFleetVehicles.length} Registered Fleet Vehicle{investorFleetVehicles.length === 1 ? '' : 's'}
                   </span>
-                  <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
-                    Vehicle Rented Out Details
-                  </h3>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-serif">
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1 font-serif">
-                      Vehicle Make & Model Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Toyota Corolla Altis Grande"
-                      value={custCarNameModel}
-                      onChange={(e) => setCustCarNameModel(e.target.value)}
-                      className="w-full custom-input font-bold font-serif"
-                    />
+                {investorFleetVehicles.length === 0 ? (
+                  <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-xl text-amber-950 text-xs font-serif space-y-1">
+                    <div className="font-bold text-sm text-amber-900 flex items-center gap-1.5">
+                      <span>⚠️</span> No Vehicles Registered in Investor Fleet!
+                    </div>
+                    <p>
+                      Customer ko gari book karwane ke liye pehle <strong>Tab 1 (+ Register Investor)</strong> mein jaa kar Investor aur uski Gari register karna lazmi hai.
+                    </p>
                   </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-serif">
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1 font-serif">
+                          Select Registered Vehicle from Investor Fleet *
+                        </label>
+                        <select
+                          required
+                          value={custCarPlateNumber}
+                          onChange={(e) => handleSelectInvestorCarForRental(e.target.value)}
+                          className="w-full custom-input font-bold uppercase font-serif"
+                        >
+                          <option value="">-- Choose Registered Fleet Vehicle --</option>
+                          {investorFleetVehicles.map((v, idx) => (
+                            <option key={idx} value={v.plate}>
+                              {v.plate} — {v.model} (Owner: {v.investorName})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1 font-serif">
-                      Vehicle Registration / Plate Number *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. LEA-2024-88"
-                      value={custCarPlateNumber}
-                      onChange={(e) => setCustCarPlateNumber(e.target.value)}
-                      className="w-full custom-input font-bold uppercase font-serif"
-                    />
-                  </div>
-                </div>
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1 font-serif">
+                          Auto-Selected Vehicle Plate Number *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          readOnly
+                          placeholder="e.g. LEA-2024-88 (Auto-Filled)"
+                          value={custCarPlateNumber}
+                          className="w-full custom-input font-bold uppercase font-serif bg-slate-100 cursor-not-allowed text-slate-900"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1 font-serif">
+                        Auto-Selected Vehicle Make & Model Name
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        readOnly
+                        placeholder="e.g. Toyota Corolla Altis Grande (Auto-Filled)"
+                        value={custCarNameModel}
+                        className="w-full custom-input font-bold font-serif bg-slate-100 cursor-not-allowed text-slate-900"
+                      />
+                    </div>
+
+                    {/* Investor Ownership Info Card */}
+                    {custCarPlateNumber && (() => {
+                      const found = investorFleetVehicles.find(v => v.plate === custCarPlateNumber);
+                      if (!found) return null;
+                      return (
+                        <div className="p-3.5 bg-emerald-50 border-2 border-emerald-300 rounded-xl text-emerald-950 text-xs font-serif flex flex-wrap items-center justify-between gap-2 shadow-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">✅</span>
+                            <div>
+                              <span className="font-bold text-slate-800">Verified Fleet Car: </span>
+                              <span className="font-bold text-emerald-900">{found.model}</span>
+                              <span className="ml-1.5 px-2 py-0.5 bg-emerald-900 text-white rounded text-[10px] font-bold uppercase">{found.plate}</span>
+                            </div>
+                          </div>
+                          <div className="text-slate-700 text-xs">
+                            <span className="font-bold text-slate-800">Deposited By Investor: </span>
+                            <span className="font-bold text-emerald-900">{found.investorName}</span>
+                            <span className="text-slate-500 ml-1">({found.investorCnic})</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
               </div>
 
               {/* Section C: Rental Period & Duration */}
