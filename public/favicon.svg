@@ -1,178 +1,170 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
   <defs>
-    <!-- Background Shield Gradient -->
-    <linearGradient id="shieldBg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#020617" />
-      <stop offset="40%" stop-color="#0f172a" />
-      <stop offset="100%" stop-color="#1e1b4b" />
+    <!-- Deep Obsidian Luxury Gradient -->
+    <linearGradient id="darkBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050811" />
+      <stop offset="50%" stop-color="#0b1120" />
+      <stop offset="100%" stop-color="#020617" />
     </linearGradient>
 
-    <!-- Ultra Gold Metallic Gradient -->
-    <linearGradient id="goldMetallic" x1="0%" y1="0%" x2="100%" y2="80%">
-      <stop offset="0%" stop-color="#fffbeb" />
-      <stop offset="20%" stop-color="#fde047" />
-      <stop offset="50%" stop-color="#eab308" />
-      <stop offset="80%" stop-color="#ca8a04" />
-      <stop offset="100%" stop-color="#854d0e" />
+    <!-- Pure Platinum & Crisp White Gradient for Car Body -->
+    <linearGradient id="whiteCarGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="35%" stop-color="#f8fafc" />
+      <stop offset="70%" stop-color="#e2e8f0" />
+      <stop offset="100%" stop-color="#cbd5e1" />
     </linearGradient>
 
-    <!-- Supercar Crimson / Sunset Gradient for Body -->
-    <linearGradient id="carBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ef4444" />
-      <stop offset="35%" stop-color="#dc2626" />
-      <stop offset="75%" stop-color="#991b1b" />
-      <stop offset="100%" stop-color="#450a0a" />
+    <!-- Platinum Metallic Highlight -->
+    <linearGradient id="platinumGleam" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#94a3b8" />
+      <stop offset="30%" stop-color="#ffffff" />
+      <stop offset="70%" stop-color="#f1f5f9" />
+      <stop offset="100%" stop-color="#94a3b8" />
     </linearGradient>
 
-    <!-- Windshield Tint Gradient -->
-    <linearGradient id="glassGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.9" />
-      <stop offset="40%" stop-color="#0284c7" stop-opacity="0.7" />
-      <stop offset="100%" stop-color="#030712" stop-opacity="0.95" />
+    <!-- Luxury Gold Accent -->
+    <linearGradient id="luxuryGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="40%" stop-color="#eab308" />
+      <stop offset="100%" stop-color="#a16207" />
     </linearGradient>
 
-    <!-- Headlight Cyan Neon Glow -->
-    <linearGradient id="neonCyan" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#a5f3fc" />
-      <stop offset="50%" stop-color="#38bdf8" />
-      <stop offset="100%" stop-color="#0284c7" />
+    <!-- Dark Tinted Privacy Glass -->
+    <linearGradient id="darkGlass" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#020617" />
     </linearGradient>
 
-    <!-- Drop Shadow & Glow Filters -->
-    <filter id="neonGlow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="6" result="blur" />
-      <feMerge>
-        <feMergeNode in="blur" />
-        <feMergeNode in="SourceGraphic" />
-      </feMerge>
+    <!-- Glow Effect for Headlights & Wheels -->
+    <filter id="carGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
 
-    <filter id="badgeShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.8" />
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.9" />
     </filter>
   </defs>
 
-  <!-- Main Outer Badge Frame (Rounded Squircle) -->
-  <rect x="16" y="16" width="480" height="480" rx="120" fill="url(#shieldBg)" filter="url(#badgeShadow)" />
+  <!-- Dark Rounded Icon Badge -->
+  <rect width="512" height="512" rx="128" fill="url(#darkBg)" />
   
-  <!-- Outer Gold Border -->
-  <rect x="22" y="22" width="468" height="468" rx="114" fill="none" stroke="url(#goldMetallic)" stroke-width="8" opacity="0.9" />
-  
-  <!-- Inner Subtle Accent Ring -->
-  <rect x="36" y="36" width="440" height="440" rx="100" fill="none" stroke="#38bdf8" stroke-width="2" stroke-opacity="0.3" stroke-dasharray="8 6" />
+  <!-- Subtle Gold / Platinum Dual Border Rings -->
+  <rect width="496" height="496" x="8" y="8" rx="120" fill="none" stroke="url(#luxuryGold)" stroke-width="4" opacity="0.85" />
+  <rect width="480" height="480" x="16" y="16" rx="112" fill="none" stroke="#334155" stroke-width="1.5" opacity="0.4" />
 
-  <!-- Background Lighting Rays / Speedlines -->
-  <path d="M 60 420 L 256 220 L 452 420" stroke="url(#goldMetallic)" stroke-width="3" stroke-opacity="0.25" fill="none" />
-  <circle cx="256" cy="220" r="160" fill="none" stroke="url(#goldMetallic)" stroke-width="1.5" stroke-opacity="0.2" />
+  <!-- Speedline Glow on Ground -->
+  <ellipse cx="256" cy="365" rx="195" ry="18" fill="#000000" opacity="0.8" filter="url(#carGlow)" />
+  <line x1="60" y1="360" x2="452" y2="360" stroke="url(#luxuryGold)" stroke-width="2.5" stroke-linecap="round" opacity="0.6" />
 
   <!-- ==================================================== -->
-  <!-- FRONT-FACING AGGRESSIVE LUXURY HYPERCAR (HIGH CLARITY) -->
+  <!-- CRISP WHITE LUXURY AERODYNAMIC EXECUTIVE CAR -->
   <!-- ==================================================== -->
-  <g transform="translate(0, 10)">
-    <!-- Car Ground Shadow -->
-    <ellipse cx="256" cy="385" rx="180" ry="24" fill="#000000" opacity="0.75" filter="url(#neonGlow)" />
+  <g transform="translate(36, 125)" filter="url(#softShadow)">
+    
+    <!-- Underbody Shadow -->
+    <path d="M 30 225 L 410 225 L 420 232 L 20 232 Z" fill="#020617" opacity="0.9" />
 
-    <!-- Roof & Cabin Pillars -->
-    <path d="M 168 185 
-             C 178 135, 205 110, 256 110 
-             C 307 110, 334 135, 344 185 
+    <!-- Main Crisp White Car Silhouette Body -->
+    <path d="M 22 205 
+             C 25 185, 45 170, 75 168 
+             C 105 166, 125 152, 160 105 
+             C 195 58, 255 52, 315 62 
+             C 355 68, 385 92, 405 135 
+             C 425 162, 435 178, 438 198 
+             C 440 212, 430 222, 415 222 
+             L 375 222 
+             C 370 185, 335 160, 298 160 
+             C 260 160, 228 185, 222 222 
+             L 155 222 
+             C 150 185, 115 160, 78 160 
+             C 40 160, 8 185, 2 222 
+             L -5 222 
+             C -15 222, -20 215, -15 205 
              Z" 
-          fill="#0f172a" stroke="url(#goldMetallic)" stroke-width="4" />
-
-    <!-- Windshield (Glossy Cyan Glass) -->
-    <path d="M 175 182 
-             C 185 140, 210 120, 256 120 
-             C 302 120, 327 140, 337 182 
-             Z" 
-          fill="url(#glassGrad)" stroke="#38bdf8" stroke-width="1.5" />
-
-    <!-- Windshield Center Reflection Line -->
-    <path d="M 256 120 L 256 182" stroke="#ffffff" stroke-width="2" stroke-opacity="0.6" />
-    <path d="M 215 135 C 235 130, 245 155, 240 180" stroke="#ffffff" stroke-width="2" stroke-opacity="0.3" fill="none" />
-
-    <!-- Side Mirrors -->
-    <!-- Left Mirror -->
-    <path d="M 152 175 C 130 170, 120 182, 142 192 L 168 190 Z" fill="url(#carBodyGrad)" stroke="url(#goldMetallic)" stroke-width="2" />
-    <!-- Right Mirror -->
-    <path d="M 360 175 C 382 170, 392 182, 370 192 L 344 190 Z" fill="url(#carBodyGrad)" stroke="url(#goldMetallic)" stroke-width="2" />
-
-    <!-- Main Aerodynamic Hood & Fenders (Aggressive Muscular Stance) -->
-    <path d="M 160 185 
-             C 120 195, 80 230, 72 285 
-             C 68 315, 85 330, 110 332 
-             L 130 334 
-             L 145 355 
-             C 170 365, 342 365, 367 355 
-             L 382 334 
-             L 402 332 
-             C 427 330, 444 315, 440 285 
-             C 432 230, 392 195, 352 185 
-             C 310 180, 202 180, 160 185 
-             Z" 
-          fill="url(#carBodyGrad)" 
-          stroke="url(#goldMetallic)" 
-          stroke-width="5" />
-
-    <!-- Hood Sculpted Power Bulge & Creases -->
-    <path d="M 185 186 L 205 275 L 256 285 L 307 275 L 327 186" fill="#7f1d1d" opacity="0.6" />
-    <path d="M 205 275 L 256 285 L 307 275" stroke="url(#goldMetallic)" stroke-width="3" fill="none" />
-    <line x1="256" y1="184" x2="256" y2="283" stroke="url(#goldMetallic)" stroke-width="2" stroke-opacity="0.8" />
-
-    <!-- Front Grille (Honeycomb Dark Carbon Center) -->
-    <path d="M 170 300 
-             L 342 300 
-             L 332 348 
-             C 290 358, 222 358, 180 348 
-             Z" 
-          fill="#090d16" 
-          stroke="url(#goldMetallic)" 
+          fill="url(#whiteCarGrad)" 
+          stroke="url(#platinumGleam)" 
           stroke-width="3" />
 
-    <!-- Grille Mesh Accents -->
-    <line x1="210" y1="305" x2="200" y2="345" stroke="#334155" stroke-width="2" />
-    <line x1="256" y1="302" x2="256" y2="352" stroke="url(#goldMetallic)" stroke-width="2.5" />
-    <line x1="302" y1="305" x2="312" y2="345" stroke="#334155" stroke-width="2" />
+    <!-- Sleek Aerodynamic Roof Reflection Line -->
+    <path d="M 162 104 C 205 65, 260 58, 318 68 C 352 74, 380 95, 398 132" 
+          stroke="#ffffff" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.9" />
 
-    <!-- Front Splitter / Lower Lip (High Performance Gold) -->
-    <path d="M 115 348 L 140 372 L 372 372 L 397 348 L 370 358 L 142 358 Z" fill="url(#goldMetallic)" />
+    <!-- Tinted Executive Dark Windows Glass -->
+    <path d="M 172 108 
+             C 200 72, 245 68, 305 72 
+             C 335 76, 360 92, 375 125 
+             L 242 125 
+             Z" 
+          fill="url(#darkGlass)" 
+          stroke="#475569" 
+          stroke-width="2" />
+    
+    <path d="M 125 142 
+             L 228 142 
+             L 178 108 
+             C 148 125, 132 135, 125 142 
+             Z" 
+          fill="url(#darkGlass)" 
+          stroke="#475569" 
+          stroke-width="2" />
 
-    <!-- Left Angular LED Headlight (Glowing Cyan & Diamond Bright) -->
-    <g filter="url(#neonGlow)">
-      <!-- Left Light Shape -->
-      <polygon points="105,270 178,260 170,285 118,288" fill="#020617" stroke="url(#goldMetallic)" stroke-width="2" />
-      <polygon points="112,272 172,264 165,280 122,283" fill="url(#neonCyan)" />
-      <!-- DRL Brow Line -->
-      <path d="M 98 266 Q 140 256 182 258" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" fill="none" />
+    <!-- Window Pillar Split (Chrome Trim) -->
+    <line x1="235" y1="74" x2="235" y2="142" stroke="url(#luxuryGold)" stroke-width="3.5" />
+    <path d="M 122 144 L 378 144" stroke="url(#luxuryGold)" stroke-width="2" />
+
+    <!-- Crisp Character Shoulder Line -->
+    <path d="M 28 180 Q 200 188 425 175" stroke="#94a3b8" stroke-width="2.5" fill="none" />
+
+    <!-- Modern LED Headlight Beam (Bright Xenon White/Cyan) -->
+    <polygon points="415,170 445,162 440,185" fill="#38bdf8" filter="url(#carGlow)" />
+    <polygon points="418,172 442,166 438,182" fill="#ffffff" />
+
+    <!-- Sleek Red Tail Light Bar -->
+    <path d="M -12 195 L 8 190 L 5 204 L -14 204 Z" fill="#ef4444" filter="url(#carGlow)" />
+
+    <!-- Front & Rear Wheels (Luxury Dual-Tone Alloys) -->
+    <!-- Front Wheel (Right) -->
+    <g transform="translate(298, 222)">
+      <circle cx="0" cy="0" r="38" fill="#020617" stroke="#ffffff" stroke-width="6" />
+      <circle cx="0" cy="0" r="26" fill="#0f172a" stroke="url(#luxuryGold)" stroke-width="2" />
+      <circle cx="0" cy="0" r="10" fill="url(#luxuryGold)" />
+      <!-- High-End 5-Spoke Rims -->
+      <line x1="-22" y1="0" x2="22" y2="0" stroke="#ffffff" stroke-width="3.5" />
+      <line x1="0" y1="-22" x2="0" y2="22" stroke="#ffffff" stroke-width="3.5" />
+      <line x1="-16" y1="-16" x2="16" y2="16" stroke="#ffffff" stroke-width="3.5" />
+      <line x1="-16" y1="16" x2="16" y2="-16" stroke="#ffffff" stroke-width="3.5" />
     </g>
 
-    <!-- Right Angular LED Headlight (Glowing Cyan & Diamond Bright) -->
-    <g filter="url(#neonGlow)">
-      <!-- Right Light Shape -->
-      <polygon points="407,270 334,260 342,285 394,288" fill="#020617" stroke="url(#goldMetallic)" stroke-width="2" />
-      <polygon points="400,272 340,264 347,280 390,283" fill="url(#neonCyan)" />
-      <!-- DRL Brow Line -->
-      <path d="M 414 266 Q 372 256 330 258" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" fill="none" />
+    <!-- Rear Wheel (Left) -->
+    <g transform="translate(78, 222)">
+      <circle cx="0" cy="0" r="38" fill="#020617" stroke="#ffffff" stroke-width="6" />
+      <circle cx="0" cy="0" r="26" fill="#0f172a" stroke="url(#luxuryGold)" stroke-width="2" />
+      <circle cx="0" cy="0" r="10" fill="url(#luxuryGold)" />
+      <!-- High-End 5-Spoke Rims -->
+      <line x1="-22" y1="0" x2="22" y2="0" stroke="#ffffff" stroke-width="3.5" />
+      <line x1="0" y1="-22" x2="0" y2="22" stroke="#ffffff" stroke-width="3.5" />
+      <line x1="-16" y1="-16" x2="16" y2="16" stroke="#ffffff" stroke-width="3.5" />
+      <line x1="-16" y1="16" x2="16" y2="-16" stroke="#ffffff" stroke-width="3.5" />
     </g>
-
-    <!-- Front Logo Crest (Gold Crown/Diamond) -->
-    <polygon points="256,238 266,252 256,262 246,252" fill="url(#goldMetallic)" filter="url(#neonGlow)" />
   </g>
 
   <!-- ==================================================== -->
-  <!-- BOLD EXECUTIVE TYPOGRAPHY (STANDOUT READABILITY) -->
+  <!-- GOLD EXECUTIVE BRANDING BADGE -->
   <!-- ==================================================== -->
-  <g transform="translate(0, 440)">
-    <!-- Gold Ribbon Bar -->
-    <rect x="96" y="-18" width="320" height="42" rx="21" fill="#020617" stroke="url(#goldMetallic)" stroke-width="3" />
+  <g transform="translate(256, 425)">
+    <!-- Gold Crown / Star Emblem -->
+    <polygon points="0,-18 6,-4 20,-4 10,6 14,20 0,11 -14,20 -10,6 -20,-4 -6,-4" fill="url(#luxuryGold)" filter="url(#carGlow)" />
     
-    <!-- Text: AL-FALAH -->
-    <text x="256" y="10" 
+    <!-- Clean Crisp Title -->
+    <text x="0" y="38" 
           text-anchor="middle" 
-          fill="url(#goldMetallic)" 
-          font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" 
-          font-size="22" 
-          font-weight="900" 
-          letter-spacing="5">
+          fill="#ffffff" 
+          font-family="'Times New Roman', Georgia, serif" 
+          font-size="24" 
+          font-weight="bold" 
+          letter-spacing="6">
       AL-FALAH
     </text>
   </g>
