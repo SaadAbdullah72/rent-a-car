@@ -6,6 +6,11 @@ export interface CustomerRentalRecord {
   customerName: string;
   customerCnic: string;
   customerPhone?: string;
+  guarantorName?: string;
+  guarantorFatherName?: string;
+  guarantorCnic?: string;
+  guarantorPhone?: string;
+  guarantorAddress?: string;
   carNameModel: string; // e.g. "Toyota Corolla Altis Grande"
   carPlateNumber: string; // e.g. "LEA-2024-88"
   startDate: string; // YYYY-MM-DD
@@ -168,8 +173,10 @@ export interface Client {
   licenseExpiry?: string;
   address: string;
   guarantorName?: string;
+  guarantorFatherName?: string;
   guarantorPhone?: string;
   guarantorCnic?: string;
+  guarantorAddress?: string;
   securityDepositHeld: number;
   totalRentalsCount: number;
   notes?: string;

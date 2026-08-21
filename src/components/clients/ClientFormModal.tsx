@@ -25,8 +25,10 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
   const [licenseExpiry, setLicenseExpiry] = useState('');
   const [address, setAddress] = useState('');
   const [guarantorName, setGuarantorName] = useState('');
+  const [guarantorFatherName, setGuarantorFatherName] = useState('');
   const [guarantorPhone, setGuarantorPhone] = useState('');
   const [guarantorCnic, setGuarantorCnic] = useState('');
+  const [guarantorAddress, setGuarantorAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
 
@@ -40,8 +42,10 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
       setLicenseExpiry(editingClient.licenseExpiry || '');
       setAddress(editingClient.address);
       setGuarantorName(editingClient.guarantorName || '');
+      setGuarantorFatherName(editingClient.guarantorFatherName || '');
       setGuarantorPhone(editingClient.guarantorPhone || '');
       setGuarantorCnic(editingClient.guarantorCnic || '');
+      setGuarantorAddress(editingClient.guarantorAddress || '');
       setNotes(editingClient.notes || '');
       setError('');
     } else {
@@ -53,8 +57,10 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
       setLicenseExpiry('');
       setAddress('');
       setGuarantorName('');
+      setGuarantorFatherName('');
       setGuarantorPhone('');
       setGuarantorCnic('');
+      setGuarantorAddress('');
       setNotes('');
       setError('');
     }
@@ -88,8 +94,10 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
       licenseExpiry: licenseExpiry || undefined,
       address: address.trim(),
       guarantorName: guarantorName.trim() || undefined,
+      guarantorFatherName: guarantorFatherName.trim() || undefined,
       guarantorPhone: guarantorPhone.trim() || undefined,
       guarantorCnic: guarantorCnic.trim() || undefined,
+      guarantorAddress: guarantorAddress.trim() || undefined,
       notes: notes.trim()
     });
   };
@@ -218,18 +226,42 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
           {/* Guarantor / Reference Section */}
           <div className="p-4 bg-slateDark-850 rounded-xl border border-slate-800 space-y-3">
             <h3 className="font-bold text-white text-xs uppercase tracking-wider text-slate-300">
-              Guarantor / Reference Information
+              Guarantor / Reference Information (ضامن کی تفصیلات)
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-400 mb-1">Guarantor Name</label>
+                <label className="block text-slate-400 mb-1">Guarantor Full Name</label>
                 <input
                   type="text"
                   value={guarantorName}
                   onChange={(e) => setGuarantorName(e.target.value)}
-                  placeholder="e.g. Bilal Ahmad Butt (Father)"
+                  placeholder="e.g. Tariq Mahmood Butt"
                   className="w-full custom-input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">Guarantor Father's Name</label>
+                <input
+                  type="text"
+                  value={guarantorFatherName}
+                  onChange={(e) => setGuarantorFatherName(e.target.value)}
+                  placeholder="e.g. Muhammad Rafiq Butt"
+                  className="w-full custom-input"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-400 mb-1">Guarantor CNIC</label>
+                <input
+                  type="text"
+                  value={guarantorCnic}
+                  onChange={(e) => setGuarantorCnic(e.target.value)}
+                  placeholder="35201-1234567-9"
+                  className="w-full custom-input font-mono"
                 />
               </div>
 
@@ -243,17 +275,17 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({
                   className="w-full custom-input font-mono"
                 />
               </div>
+            </div>
 
-              <div>
-                <label className="block text-slate-400 mb-1">Guarantor CNIC</label>
-                <input
-                  type="text"
-                  value={guarantorCnic}
-                  onChange={(e) => setGuarantorCnic(e.target.value)}
-                  placeholder="35201-1234567-9"
-                  className="w-full custom-input font-mono"
-                />
-              </div>
+            <div>
+              <label className="block text-slate-400 mb-1">Guarantor Permanent Address</label>
+              <input
+                type="text"
+                value={guarantorAddress}
+                onChange={(e) => setGuarantorAddress(e.target.value)}
+                placeholder="e.g. House 14-B, Sector C, Bahria Town, Lahore"
+                className="w-full custom-input"
+              />
             </div>
           </div>
 

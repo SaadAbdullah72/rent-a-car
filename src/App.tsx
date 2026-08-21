@@ -118,6 +118,12 @@ export function App() {
   const [custName, setCustName] = useState('');
   const [custCnic, setCustCnic] = useState('');
   const [custPhone, setCustPhone] = useState('');
+  const [custGuarantorName, setCustGuarantorName] = useState('');
+  const [custGuarantorFatherName, setCustGuarantorFatherName] = useState('');
+  const [custGuarantorCnic, setCustGuarantorCnic] = useState('');
+  const [custGuarantorPhone, setCustGuarantorPhone] = useState('');
+  const [custGuarantorAddress, setCustGuarantorAddress] = useState('');
+  const [existingCustomerMatch, setExistingCustomerMatch] = useState<CustomerRentalRecord | null>(null);
   const [custCarNameModel, setCustCarNameModel] = useState('');
   const [custCarPlateNumber, setCustCarPlateNumber] = useState('');
   const [custCarSearchQuery, setCustCarSearchQuery] = useState('');
@@ -581,6 +587,43 @@ export function App() {
     }
   };
 
+  // --- CUSTOMER CNIC AUTO-LOOKUP & GUARANTOR AUTO-FILL ---
+  const handleCustomerCnicChange = (rawCnic: string) => {
+    const formatted = formatCnicInput(rawCnic);
+    setCustCnic(formatted);
+
+    // If formatted matches an existing customer in customerRentals database
+    if (formatted.length >= 13) {
+      const match = customerRentals.find(r => r.customerCnic.trim() === formatted.trim());
+      if (match) {
+        setExistingCustomerMatch(match);
+        // Automatically populate empty fields with existing saved customer & guarantor data
+        if (!custName.trim() && match.customerName) setCustName(match.customerName);
+        if (!custPhone.trim() && match.customerPhone) setCustPhone(match.customerPhone);
+        if (!custGuarantorName.trim() && match.guarantorName) setCustGuarantorName(match.guarantorName);
+        if (!custGuarantorFatherName.trim() && match.guarantorFatherName) setCustGuarantorFatherName(match.guarantorFatherName);
+        if (!custGuarantorCnic.trim() && match.guarantorCnic) setCustGuarantorCnic(match.guarantorCnic);
+        if (!custGuarantorPhone.trim() && match.guarantorPhone) setCustGuarantorPhone(match.guarantorPhone);
+        if (!custGuarantorAddress.trim() && match.guarantorAddress) setCustGuarantorAddress(match.guarantorAddress);
+      } else {
+        setExistingCustomerMatch(null);
+      }
+    } else {
+      setExistingCustomerMatch(null);
+    }
+  };
+
+  const applyExistingCustomerData = (match: CustomerRentalRecord) => {
+    if (match.customerName) setCustName(match.customerName);
+    if (match.customerPhone) setCustPhone(match.customerPhone);
+    if (match.guarantorName) setCustGuarantorName(match.guarantorName);
+    if (match.guarantorFatherName) setCustGuarantorFatherName(match.guarantorFatherName);
+    if (match.guarantorCnic) setCustGuarantorCnic(match.guarantorCnic);
+    if (match.guarantorPhone) setCustGuarantorPhone(match.guarantorPhone);
+    if (match.guarantorAddress) setCustGuarantorAddress(match.guarantorAddress);
+    showNotification(`Guarantor & Customer details loaded for CNIC: ${match.customerCnic}`, 'success');
+  };
+
   // --- CUSTOMER RENTAL HANDLERS ---
   const handleCustomerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -613,6 +656,11 @@ export function App() {
       customerName: custName.trim(),
       customerCnic: custCnic.trim(),
       customerPhone: custPhone.trim(),
+      guarantorName: custGuarantorName.trim() || undefined,
+      guarantorFatherName: custGuarantorFatherName.trim() || undefined,
+      guarantorCnic: custGuarantorCnic.trim() || undefined,
+      guarantorPhone: custGuarantorPhone.trim() || undefined,
+      guarantorAddress: custGuarantorAddress.trim() || undefined,
       carNameModel: custCarNameModel.trim(),
       carPlateNumber: custCarPlateNumber.trim().toUpperCase(),
       startDate: custStartDate,
@@ -637,6 +685,9 @@ export function App() {
 
         // 2. Clear form only on success
         setCustName(''); setCustCnic(''); setCustPhone('');
+        setCustGuarantorName(''); setCustGuarantorFatherName('');
+        setCustGuarantorCnic(''); setCustGuarantorPhone(''); setCustGuarantorAddress('');
+        setExistingCustomerMatch(null);
         setCustCarNameModel(''); setCustCarPlateNumber('');
         setCustStartDate(todayIso); setCustEndDate(todayIso);
         setCustTotalPrice(''); setCustAdvancePaid(''); setCustNotes('');
@@ -644,11 +695,14 @@ export function App() {
         // 3. Show verified database success popup
         setShowSuccessModal({
           title: 'Customer Rental Booking Saved in Database!',
-          subtitle: 'Vehicle rental agreement and customer balance ledger have been verified and saved to MongoDB Cloud.',
+          subtitle: 'Vehicle rental agreement, guarantor verification, and customer balance ledger saved to MongoDB Cloud.',
           targetTab: 'customer-directory',
           details: [
             { label: 'Customer Name', value: record.customerName },
             { label: 'CNIC Number', value: record.customerCnic },
+            { label: 'Guarantor / Zamin', value: `${record.guarantorName || 'N/A'}${record.guarantorFatherName ? ` (S/O ${record.guarantorFatherName})` : ''}` },
+            { label: 'Guarantor CNIC / Phone', value: `${record.guarantorCnic || 'N/A'}${record.guarantorPhone ? ` / ${record.guarantorPhone}` : ''}` },
+            { label: 'Guarantor Address', value: record.guarantorAddress || 'N/A' },
             { label: 'Vehicle Rented', value: `${record.carNameModel} [${record.carPlateNumber}]` },
             { label: 'Total Rent / Balance Due', value: `Rs. ${record.totalPrice.toLocaleString()} (Due: Rs. ${record.balanceDue.toLocaleString()})` },
             { label: 'Database Status', value: 'Saved & Verified in MongoDB' }
@@ -905,6 +959,12 @@ export function App() {
     return customerRentals.filter(r =>
       r.customerName.toLowerCase().includes(q) ||
       r.customerCnic.toLowerCase().includes(q) ||
+      (r.customerPhone && r.customerPhone.toLowerCase().includes(q)) ||
+      (r.guarantorName && r.guarantorName.toLowerCase().includes(q)) ||
+      (r.guarantorFatherName && r.guarantorFatherName.toLowerCase().includes(q)) ||
+      (r.guarantorCnic && r.guarantorCnic.toLowerCase().includes(q)) ||
+      (r.guarantorPhone && r.guarantorPhone.toLowerCase().includes(q)) ||
+      (r.guarantorAddress && r.guarantorAddress.toLowerCase().includes(q)) ||
       r.carPlateNumber.toLowerCase().includes(q) ||
       r.carNameModel.toLowerCase().includes(q)
     );
@@ -1874,16 +1934,47 @@ export function App() {
               
               {/* Section A: Customer Identification */}
               <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
-                <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
-                    A
-                  </span>
-                  <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
-                    Customer Identification & Contact
-                  </h3>
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
+                      A
+                    </span>
+                    <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
+                      Customer Identification & Contact
+                    </h3>
+                  </div>
+                  {existingCustomerMatch && (
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-[10px]">
+                        ✓ Existing Customer Profile Recognized
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => applyExistingCustomerData(existingCustomerMatch)}
+                        className="px-2.5 py-0.5 bg-slate-900 hover:bg-slate-800 text-white rounded text-[10px] font-bold transition"
+                      >
+                        Auto-Fill All Details
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-serif">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1 font-serif">
+                      Customer CNIC Number *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={15}
+                      placeholder="e.g. 35201-9876543-1"
+                      value={custCnic}
+                      onChange={(e) => handleCustomerCnicChange(e.target.value)}
+                      className="w-full custom-input font-bold font-serif font-mono"
+                    />
+                  </div>
+
                   <div>
                     <label className="block text-slate-700 font-bold mb-1 font-serif">
                       Customer Full Name *
@@ -1900,21 +1991,6 @@ export function App() {
 
                   <div>
                     <label className="block text-slate-700 font-bold mb-1 font-serif">
-                      Customer CNIC Number *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      maxLength={15}
-                      placeholder="e.g. 35201-9876543-1"
-                      value={custCnic}
-                      onChange={(e) => setCustCnic(formatCnicInput(e.target.value))}
-                      className="w-full custom-input font-bold font-serif"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1 font-serif">
                       Customer Phone Number
                     </label>
                     <input
@@ -1923,19 +1999,114 @@ export function App() {
                       placeholder="e.g. 0321-9988776"
                       value={custPhone}
                       onChange={(e) => setCustPhone(formatPhoneInput(e.target.value))}
-                      className="w-full custom-input font-bold font-serif"
+                      className="w-full custom-input font-bold font-serif font-mono"
                     />
                   </div>
 
                 </div>
               </div>
 
-              {/* Section B: Searchable Investor Fleet Vehicle Picker */}
+              {/* Section B: Guarantor / Zamin Verification */}
+              <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
+                      B
+                    </span>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
+                        Guarantor & Reference Verification (ضامن کی تفصیلات)
+                      </h3>
+                      <p className="text-[11px] text-slate-500 font-serif">
+                        Guarantor info is permanently remembered and saved against customer's CNIC in database.
+                      </p>
+                    </div>
+                  </div>
+                  {custGuarantorName && (
+                    <span className="px-2.5 py-0.5 rounded bg-slate-900 text-white font-bold text-[10px] font-serif">
+                      Guarantor: {custGuarantorName}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-serif">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1 font-serif">
+                      Guarantor Full Name (ضامن کا نام)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Tariq Mahmood Butt"
+                      value={custGuarantorName}
+                      onChange={(e) => setCustGuarantorName(e.target.value)}
+                      className="w-full custom-input font-bold font-serif"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1 font-serif">
+                      Guarantor Father's Name (والد کا نام)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Muhammad Rafiq Butt"
+                      value={custGuarantorFatherName}
+                      onChange={(e) => setCustGuarantorFatherName(e.target.value)}
+                      className="w-full custom-input font-bold font-serif"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1 font-serif">
+                      Guarantor CNIC Number (شناختی کارڈ)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={15}
+                      placeholder="e.g. 35201-1122334-5"
+                      value={custGuarantorCnic}
+                      onChange={(e) => setCustGuarantorCnic(formatCnicInput(e.target.value))}
+                      className="w-full custom-input font-bold font-serif font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-serif">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1 font-serif">
+                      Guarantor Mobile Number (موبائل نمبر)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={12}
+                      placeholder="e.g. 0300-4455667"
+                      value={custGuarantorPhone}
+                      onChange={(e) => setCustGuarantorPhone(formatPhoneInput(e.target.value))}
+                      className="w-full custom-input font-bold font-serif font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1 font-serif">
+                      Guarantor Address (رہائشی / دکان کا پتہ)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. House 14-B, Sector C, Bahria Town, Lahore"
+                      value={custGuarantorAddress}
+                      onChange={(e) => setCustGuarantorAddress(e.target.value)}
+                      className="w-full custom-input font-bold font-serif"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section C: Searchable Investor Fleet Vehicle Picker */}
               <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
                 <div className="flex items-center justify-between border-b border-slate-200 pb-2.5 font-serif">
                   <div className="flex items-center gap-2.5">
                     <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
-                      B
+                      C
                     </span>
                     <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
                       Select Vehicle from Investor Fleet (Mandatory)
@@ -2131,12 +2302,12 @@ export function App() {
                 )}
               </div>
 
-              {/* Section C: Rental Period & Duration */}
+              {/* Section D: Rental Period & Duration */}
               <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
                 <div className="flex items-center justify-between border-b border-slate-200 pb-2.5 font-serif">
                   <div className="flex items-center gap-2.5">
                     <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
-                      C
+                      D
                     </span>
                     <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
                       Rental Period & Duration
@@ -2177,11 +2348,11 @@ export function App() {
                 </div>
               </div>
 
-              {/* Section D: Rental Charges & Payment Accounting */}
+              {/* Section E: Rental Charges & Payment Accounting */}
               <div className="p-5 bg-slate-50 border border-slate-300 rounded-xl shadow-sm space-y-4 font-serif">
                 <div className="flex items-center gap-2.5 border-b border-slate-200 pb-2.5">
                   <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-[11px] shadow-sm">
-                    D
+                    E
                   </span>
                   <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide font-serif">
                     Rental Charges & Payment Accounting (Rs.)
@@ -2323,8 +2494,8 @@ export function App() {
                   <thead className="bg-[#faf9f5] border-b border-slate-300 font-bold text-slate-700 font-serif">
                     <tr>
                       <th className="p-3 border-r border-slate-200">#</th>
-                      <th className="p-3 border-r border-slate-200">Customer Name</th>
-                      <th className="p-3 border-r border-slate-200">CNIC Number</th>
+                      <th className="p-3 border-r border-slate-200">Customer Details</th>
+                      <th className="p-3 border-r border-slate-200">Guarantor / Zamin (ضامن)</th>
                       <th className="p-3 border-r border-slate-200">Vehicle Rented</th>
                       <th className="p-3 border-r border-slate-200">Plate Number</th>
                       <th className="p-3 border-r border-slate-200">Rental Period</th>
@@ -2346,19 +2517,55 @@ export function App() {
                           <td className="p-3 border-r border-slate-200 font-bold text-slate-500 text-center font-serif">
                             {index + 1}
                           </td>
-                          <td className="p-3 border-r border-slate-200 font-bold text-slate-900 font-serif">
+                          <td className="p-3 border-r border-slate-200 font-serif">
                             <button
                               onClick={() => {
                                 setSelectedCustomerProfileId(rId);
                                 setActiveTab('customer-profile');
                               }}
-                              className="underline hover:text-indigo-900 font-serif text-left"
+                              className="font-bold text-slate-900 underline hover:text-indigo-900 font-serif text-left block"
                             >
                               {r.customerName}
                             </button>
+                            <div className="text-[11px] text-slate-600 font-mono mt-0.5">
+                              CNIC: <strong>{r.customerCnic}</strong>
+                            </div>
+                            {r.customerPhone && (
+                              <div className="text-[11px] text-slate-500 font-mono">
+                                Ph: {r.customerPhone}
+                              </div>
+                            )}
                           </td>
-                          <td className="p-3 border-r border-slate-200 font-bold font-mono font-serif">
-                            {r.customerCnic}
+                          <td className="p-3 border-r border-slate-200 text-xs font-serif">
+                            {r.guarantorName ? (
+                              <div className="space-y-0.5">
+                                <div className="font-bold text-slate-900">
+                                  {r.guarantorName}
+                                  {r.guarantorFatherName && (
+                                    <span className="font-normal text-slate-600 text-[11px] block">
+                                      S/O {r.guarantorFatherName}
+                                    </span>
+                                  )}
+                                </div>
+                                {r.guarantorCnic && (
+                                  <div className="text-[11px] text-slate-600 font-mono">
+                                    CNIC: <strong>{r.guarantorCnic}</strong>
+                                  </div>
+                                )}
+                                {r.guarantorPhone && (
+                                  <div className="text-[11px] text-slate-600 font-mono">
+                                    Ph: {r.guarantorPhone}
+                                  </div>
+                                )}
+                                {r.guarantorAddress && (
+                                  <div className="text-[10px] text-slate-500 truncate max-w-[200px]" title={r.guarantorAddress}>
+                                    📍 {r.guarantorAddress}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">No Guarantor</span>
+                            )}
                           </td>
                           <td className="p-3 border-r border-slate-200 font-bold font-serif">
                             {r.carNameModel}
@@ -3061,6 +3268,7 @@ export function App() {
                           <tr>
                             <th className="p-2.5">Customer</th>
                             <th className="p-2.5">CNIC</th>
+                            <th className="p-2.5">Guarantor / Zamin</th>
                             <th className="p-2.5">Rental Period</th>
                             <th className="p-2.5">Rent Charged</th>
                             <th className="p-2.5">Advance</th>
@@ -3072,6 +3280,16 @@ export function App() {
                             <tr key={idx} className="font-serif">
                               <td className="p-2.5 font-bold font-serif">{r.customerName}</td>
                               <td className="p-2.5 font-mono font-serif">{r.customerCnic}</td>
+                              <td className="p-2.5 text-[11px] font-serif">
+                                {r.guarantorName ? (
+                                  <div>
+                                    <strong className="text-slate-900">{r.guarantorName}</strong>
+                                    {r.guarantorPhone && <span className="text-slate-500 block font-mono">({r.guarantorPhone})</span>}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </td>
                               <td className="p-2.5 font-serif">{r.startDate} to {r.endDate} ({r.totalDays} Days)</td>
                               <td className="p-2.5 font-bold font-serif">Rs. {r.totalPrice.toLocaleString()}</td>
                               <td className="p-2.5 text-emerald-800 font-serif">Rs. {r.advancePaid.toLocaleString()}</td>
@@ -3326,16 +3544,63 @@ export function App() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-serif">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-serif">
+                  {/* Card 1: Vehicle & Schedule */}
                   <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-2 font-serif">
-                    <div className="font-bold text-slate-900 text-sm font-serif">Vehicle Rented</div>
+                    <div className="font-bold text-slate-900 text-sm font-serif border-b border-slate-100 pb-1.5">
+                      🚗 Vehicle Rented & Schedule
+                    </div>
                     <div>Model: <strong>{selectedCustomerProfile.carNameModel}</strong></div>
-                    <div>Plate: <strong className="font-mono">{selectedCustomerProfile.carPlateNumber}</strong></div>
-                    <div>Dates: <strong>{selectedCustomerProfile.startDate} to {selectedCustomerProfile.endDate} ({selectedCustomerProfile.totalDays} Days)</strong></div>
+                    <div>Plate: <strong className="font-mono bg-slate-100 px-1.5 py-0.5 rounded">{selectedCustomerProfile.carPlateNumber}</strong></div>
+                    <div>Rental Dates: <strong>{selectedCustomerProfile.startDate} to {selectedCustomerProfile.endDate}</strong></div>
+                    <div>Total Duration: <strong className="font-mono">{selectedCustomerProfile.totalDays} Days Time Lapse</strong></div>
+                    {selectedCustomerProfile.notes && (
+                      <div className="text-slate-500 text-[11px] pt-1">
+                        Note: <em>{selectedCustomerProfile.notes}</em>
+                      </div>
+                    )}
                   </div>
 
+                  {/* Card 2: Guarantor Verification */}
                   <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-2 font-serif">
-                    <div className="font-bold text-slate-900 text-sm font-serif">Financial Accounting</div>
+                    <div className="font-bold text-slate-900 text-sm font-serif border-b border-slate-100 pb-1.5 flex items-center justify-between">
+                      <span>🛡️ Guarantor Details (ضامن)</span>
+                      {selectedCustomerProfile.guarantorName && (
+                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded text-[10px] font-bold">
+                          Verified
+                        </span>
+                      )}
+                    </div>
+                    {selectedCustomerProfile.guarantorName ? (
+                      <div className="space-y-1.5">
+                        <div>
+                          Name: <strong>{selectedCustomerProfile.guarantorName}</strong>
+                        </div>
+                        <div>
+                          Father's Name: <strong>{selectedCustomerProfile.guarantorFatherName || '—'}</strong>
+                        </div>
+                        <div>
+                          Guarantor CNIC: <strong className="font-mono">{selectedCustomerProfile.guarantorCnic || '—'}</strong>
+                        </div>
+                        <div>
+                          Mobile Contact: <strong className="font-mono">{selectedCustomerProfile.guarantorPhone || '—'}</strong>
+                        </div>
+                        <div>
+                          Address: <strong>{selectedCustomerProfile.guarantorAddress || '—'}</strong>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-slate-400 italic py-4 text-center">
+                        No guarantor record saved for this customer.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Card 3: Financial Accounting */}
+                  <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-2 font-serif">
+                    <div className="font-bold text-slate-900 text-sm font-serif border-b border-slate-100 pb-1.5">
+                      💰 Financial Accounting
+                    </div>
                     <div>Total Rent Charged: <strong>Rs. {selectedCustomerProfile.totalPrice.toLocaleString()}</strong></div>
                     <div className="text-emerald-800 font-bold">Advance Paid: Rs. {selectedCustomerProfile.advancePaid.toLocaleString()}</div>
                     <div className="text-rose-800 font-bold">Balance Due: Rs. {selectedCustomerProfile.balanceDue.toLocaleString()}</div>
@@ -3586,7 +3851,7 @@ export function App() {
                             maxLength={15}
                             value={editingModal.data.customerCnic}
                             onChange={(e) => setEditingModal({ ...editingModal, data: { ...editingModal.data, customerCnic: formatCnicInput(e.target.value) } })}
-                            className="w-full custom-input font-bold font-serif"
+                            className="w-full custom-input font-bold font-serif font-mono"
                           />
                         </div>
 
@@ -3597,9 +3862,77 @@ export function App() {
                             maxLength={12}
                             value={editingModal.data.customerPhone || ''}
                             onChange={(e) => setEditingModal({ ...editingModal, data: { ...editingModal.data, customerPhone: formatPhoneInput(e.target.value) } })}
+                            className="w-full custom-input font-bold font-serif font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* EDIT GUARANTOR DETAILS */}
+                    <div className="p-3 bg-[#faf9f5] border border-slate-200 rounded-lg space-y-3 font-serif">
+                      <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wide border-b border-slate-200 pb-1 font-serif">
+                        Guarantor / Reference Information (ضامن کی تفصیلات)
+                      </h4>
+
+                      <div className="grid grid-cols-2 gap-3 font-serif">
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1 font-serif">Guarantor Name (ضامن کا نام)</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Tariq Mahmood Butt"
+                            value={editingModal.data.guarantorName || ''}
+                            onChange={(e) => setEditingModal({ ...editingModal, data: { ...editingModal.data, guarantorName: e.target.value } })}
                             className="w-full custom-input font-bold font-serif"
                           />
                         </div>
+
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1 font-serif">Guarantor Father's Name (والد کا نام)</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Muhammad Rafiq Butt"
+                            value={editingModal.data.guarantorFatherName || ''}
+                            onChange={(e) => setEditingModal({ ...editingModal, data: { ...editingModal.data, guarantorFatherName: e.target.value } })}
+                            className="w-full custom-input font-bold font-serif"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 font-serif">
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1 font-serif">Guarantor CNIC Number</label>
+                          <input
+                            type="text"
+                            maxLength={15}
+                            placeholder="e.g. 35201-1122334-5"
+                            value={editingModal.data.guarantorCnic || ''}
+                            onChange={(e) => setEditingModal({ ...editingModal, data: { ...editingModal.data, guarantorCnic: formatCnicInput(e.target.value) } })}
+                            className="w-full custom-input font-bold font-serif font-mono"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1 font-serif">Guarantor Mobile Number</label>
+                          <input
+                            type="text"
+                            maxLength={12}
+                            placeholder="e.g. 0300-4455667"
+                            value={editingModal.data.guarantorPhone || ''}
+                            onChange={(e) => setEditingModal({ ...editingModal, data: { ...editingModal.data, guarantorPhone: formatPhoneInput(e.target.value) } })}
+                            className="w-full custom-input font-bold font-serif font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1 font-serif">Guarantor Permanent Address</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. House 14-B, Sector C, Bahria Town, Lahore"
+                          value={editingModal.data.guarantorAddress || ''}
+                          onChange={(e) => setEditingModal({ ...editingModal, data: { ...editingModal.data, guarantorAddress: e.target.value } })}
+                          className="w-full custom-input font-bold font-serif"
+                        />
                       </div>
                     </div>
 

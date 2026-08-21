@@ -152,8 +152,20 @@ export const ClientListView: React.FC<ClientListViewProps> = ({
 
                   {/* Guarantor Details */}
                   {client.guarantorName && (
-                    <div className="p-2.5 bg-[#faf9f5] rounded-lg border border-slate-200 text-[11px] text-slate-700 font-serif">
-                      Guarantor / Reference: <strong className="text-slate-900 font-serif">{client.guarantorName}</strong> ({client.guarantorPhone || 'N/A'})
+                    <div className="p-2.5 bg-[#faf9f5] rounded-lg border border-slate-200 text-[11px] text-slate-700 font-serif space-y-0.5">
+                      <div>
+                        Guarantor / Zamin: <strong className="text-slate-900 font-serif">{client.guarantorName}</strong>
+                        {client.guarantorFatherName && <span className="text-slate-600"> (S/O {client.guarantorFatherName})</span>}
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-mono">
+                        {client.guarantorCnic && <span>CNIC: {client.guarantorCnic} </span>}
+                        {client.guarantorPhone && <span>| Ph: {client.guarantorPhone}</span>}
+                      </div>
+                      {client.guarantorAddress && (
+                        <div className="text-[10px] text-slate-500 truncate" title={client.guarantorAddress}>
+                          📍 {client.guarantorAddress}
+                        </div>
+                      )}
                     </div>
                   )}
 

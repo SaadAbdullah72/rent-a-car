@@ -55,20 +55,25 @@ const InvestorSchema = new mongoose.Schema({
 }, { timestamps: false, versionKey: false });
 
 const CustomerRentalSchema = new mongoose.Schema({
-  id:             String,
-  customerName:   { type: String, required: true },
-  customerCnic:   { type: String, required: true },
-  customerPhone:  { type: String, default: '' },
-  carNameModel:   { type: String, required: true },
-  carPlateNumber: { type: String, required: true },
-  startDate:      String, endDate: String,
-  totalDays:      { type: Number, default: 1 },
-  totalPrice:     { type: Number, default: 0 },
-  advancePaid:    { type: Number, default: 0 },
-  balanceDue:     { type: Number, default: 0 },
-  paymentStatus:  { type: String, default: 'PENDING' },
-  notes:          { type: String, default: '' },
-  createdAt:      { type: String, default: () => new Date().toISOString() }
+  id:                  String,
+  customerName:        { type: String, required: true },
+  customerCnic:        { type: String, required: true },
+  customerPhone:       { type: String, default: '' },
+  guarantorName:       { type: String, default: '' },
+  guarantorFatherName: { type: String, default: '' },
+  guarantorCnic:       { type: String, default: '' },
+  guarantorPhone:      { type: String, default: '' },
+  guarantorAddress:    { type: String, default: '' },
+  carNameModel:        { type: String, required: true },
+  carPlateNumber:      { type: String, required: true },
+  startDate:           String, endDate: String,
+  totalDays:           { type: Number, default: 1 },
+  totalPrice:          { type: Number, default: 0 },
+  advancePaid:         { type: Number, default: 0 },
+  balanceDue:          { type: Number, default: 0 },
+  paymentStatus:       { type: String, default: 'PENDING' },
+  notes:               { type: String, default: '' },
+  createdAt:           { type: String, default: () => new Date().toISOString() }
 }, { timestamps: false, versionKey: false });
 
 const MaintenanceSchema = new mongoose.Schema({
@@ -173,8 +178,8 @@ async function seedDatabase() {
     { id:'inv-seed-3', name:'Sardar Jahangir Tareen', cnic:'38403-5544332-9', phone:'0301-7788990', vehicles:[{carNameModel:'Toyota Fortuner Legender',carPlateNumber:'LXR-786',startDate:'2026-08-01',endDate:'2026-08-30',totalDays:30,payoutAmount:220000,advancePaid:100000,balanceDue:120000,paymentStatus:'PENDING',notes:'Luxury SUV monthly deposit.'}], createdAt:'2026-08-01T09:00:00.000Z' }
   ]);
   await CustomerRental.insertMany([
-    { id:'rent-seed-1', customerName:'Hamza Bilal Butt', customerCnic:'35201-9876543-1', customerPhone:'0321-9988776', carNameModel:'Toyota Corolla Altis Grande', carPlateNumber:'LEA-2024-88', startDate:'2026-08-18', endDate:'2026-08-23', totalDays:6, totalPrice:42000, advancePaid:15000, balanceDue:27000, paymentStatus:'PENDING', notes:'Family northern tour.', createdAt:'2026-08-18T08:00:00.000Z' },
-    { id:'rent-seed-2', customerName:'Usman Ali Dogar',  customerCnic:'35404-7766554-3', customerPhone:'0302-8877665', carNameModel:'Kia Sportage AWD', carPlateNumber:'ISB-990-Z', startDate:'2026-08-18', endDate:'2026-08-20', totalDays:3, totalPrice:36000, advancePaid:20000, balanceDue:16000, paymentStatus:'PENDING', notes:'Official travel.', createdAt:'2026-08-18T09:00:00.000Z' }
+    { id:'rent-seed-1', customerName:'Hamza Bilal Butt', customerCnic:'35201-9876543-1', customerPhone:'0321-9988776', guarantorName:'Tariq Mahmood Butt', guarantorFatherName:'Muhammad Rafiq Butt', guarantorCnic:'35201-1122334-5', guarantorPhone:'0300-4455667', guarantorAddress:'House 14-B, Sector C, Bahria Town, Lahore', carNameModel:'Toyota Corolla Altis Grande', carPlateNumber:'LEA-2024-88', startDate:'2026-08-18', endDate:'2026-08-23', totalDays:6, totalPrice:42000, advancePaid:15000, balanceDue:27000, paymentStatus:'PENDING', notes:'Family northern tour.', createdAt:'2026-08-18T08:00:00.000Z' },
+    { id:'rent-seed-2', customerName:'Usman Ali Dogar',  customerCnic:'35404-7766554-3', customerPhone:'0302-8877665', guarantorName:'Chaudhry Arshad Dogar', guarantorFatherName:'Chaudhry Bashir Dogar', guarantorCnic:'35404-9988112-1', guarantorPhone:'0333-8877112', guarantorAddress:'Main Bazar, Sheikhupura Road, Gujranwala', carNameModel:'Kia Sportage AWD', carPlateNumber:'ISB-990-Z', startDate:'2026-08-18', endDate:'2026-08-20', totalDays:3, totalPrice:36000, advancePaid:20000, balanceDue:16000, paymentStatus:'PENDING', notes:'Official travel.', createdAt:'2026-08-18T09:00:00.000Z' }
   ]);
   await MaintenanceRecord.insertMany([
     { id:'maint-seed-1', carPlateNumber:'LEA-2024-88', carNameModel:'Toyota Corolla Altis Grande', serviceType:'Oil & Filters Change', customServiceType:'', serviceDate:'2026-08-10', cost:14500, vendorName:'Toyota Ravi Motors', odometer:35000, description:'Mobil 1 5W-30 synthetic oil change.', createdAt:'2026-08-10T10:00:00.000Z' },
