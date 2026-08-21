@@ -56,12 +56,12 @@
   height: 100vh;
   background-image: url('/bg-car.jpg');
   background-size: cover;
-  background-position: center;
+  background-position: center right;
   background-attachment: fixed;
   opacity: 1;
   pointer-events: none;
   z-index: 0;
-  filter: contrast(106%) brightness(106%);
+  filter: contrast(104%) brightness(102%);
 }
 
 .luxury-bg-overlay {
@@ -70,7 +70,7 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: linear-gradient(180deg, rgba(6, 11, 25, 0.70) 0%, rgba(6, 11, 25, 0.30) 45%, rgba(6, 11, 25, 0.65) 100%);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.40) 40%, rgba(255, 255, 255, 0.05) 70%, rgba(0, 0, 0, 0) 100%);
   pointer-events: none;
   z-index: 0;
 }

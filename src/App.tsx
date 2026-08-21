@@ -1126,36 +1126,37 @@ export function App() {
           </div>
         )}
 
-        {/* VIEW MODE 1: EXECUTIVE LANDING PAGE */}
+        {/* VIEW MODE 1: EXECUTIVE LANDING PAGE - MATCHING REFERENCE HERO DESIGN */}
         {viewMode === 'landing' && (
-          <div className="min-h-[85vh] flex flex-col items-center justify-center text-center space-y-6 animate-fade-scale font-serif px-4 py-16">
+          <div className="min-h-[85vh] flex items-center justify-start text-left px-4 sm:px-8 py-16 animate-fade-in font-sans">
             
-            {/* Elegant Pill Category */}
-            <div className="inline-flex items-center gap-2 px-5 py-1.5 rounded-full bg-slate-950/70 border border-slate-700/80 backdrop-blur-md shadow-lg">
-              <span className="text-[11px] uppercase tracking-[0.25em] text-slate-200 font-semibold font-serif">
-                Enterprise Fleet Management
-              </span>
-            </div>
+            <div className="max-w-lg lg:max-w-xl space-y-5">
+              
+              {/* Category Subhead */}
+              <div className="text-xs uppercase tracking-widest text-[#ea580c] font-bold">
+                Al-Falah Fleet Management
+              </div>
 
-            {/* Main Luxury Title - Directly on Background */}
-            <div className="space-y-3 max-w-3xl">
-              <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold text-white tracking-tight leading-tight font-serif drop-shadow-[0_4px_20px_rgba(0,0,0,0.95)]">
-                Al-Falah Rent A Car
+              {/* Bold Clean Headline matching reference style */}
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-slate-950 tracking-tight leading-tight">
+                Driving Excellence is no longer A Dream
               </h1>
               
-              <p className="text-sm sm:text-base md:text-lg text-slate-200 font-serif leading-relaxed max-w-2xl mx-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)] font-medium">
-                Executive Fleet Intake, Customer Rentals & Financial Ledger Accounting Portal
+              {/* Clean Readable Subtext */}
+              <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-normal">
+                Enterprise fleet intake, customer rental bookings, vehicle maintenance registry, and complete financial ledger accounting.
               </p>
-            </div>
 
-            {/* Formal Executive Action Button */}
-            <div className="pt-4">
-              <button
-                onClick={() => setShowLoginModal(true)}
-                className="px-10 py-3.5 bg-white hover:bg-slate-100 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-xl transition duration-300 font-serif shadow-[0_8px_30px_rgba(0,0,0,0.8)] border border-white/80 transform hover:scale-[1.03] active:scale-[0.99]"
-              >
-                Access System Portal
-              </button>
+              {/* Solid Action Button matching reference */}
+              <div className="pt-2">
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="px-8 py-3.5 bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-xs uppercase tracking-wider rounded-md shadow-md hover:shadow-lg transition duration-200 transform hover:scale-[1.02] active:scale-[0.99]"
+                >
+                  Access System Portal
+                </button>
+              </div>
+
             </div>
 
           </div>
