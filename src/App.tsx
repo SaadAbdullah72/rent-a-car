@@ -350,7 +350,6 @@ export function App() {
   useEffect(() => {
     async function loadData() {
       try {
-        // Fire all 3 fetches in parallel (first call also warms up serverless)
         const [invData, custData, maintData] = await Promise.all([
           StorageService.fetchInvestorsFromMongo(),
           StorageService.fetchCustomerRentalsFromMongo(),
@@ -364,11 +363,33 @@ export function App() {
         setDbConnected(true);
       } catch (e) {
         setDbConnected(false);
-        // Still try a health warm-up so subsequent saves are fast
-        fetch('/api/health').catch(() => {});
+        StorageService.checkDbHealth().catch(() => {});
       }
     }
     loadData();
+
+    // Auto-Heartbeat & Instant Reconnect when window regains focus or comes online
+    const monitorInterval = setInterval(async () => {
+      const health = await StorageService.checkDbHealth();
+      setDbConnected(health.connected);
+    }, 25000);
+
+    const onReconnected = async () => {
+      const health = await StorageService.checkDbHealth();
+      setDbConnected(health.connected);
+      if (health.connected) {
+        refreshAllData();
+      }
+    };
+
+    window.addEventListener('online', onReconnected);
+    window.addEventListener('focus', onReconnected);
+
+    return () => {
+      clearInterval(monitorInterval);
+      window.removeEventListener('online', onReconnected);
+      window.removeEventListener('focus', onReconnected);
+    };
   }, []);
 
 

@@ -287,6 +287,37 @@ export const defaultSeedMaintenance: VehicleMaintenanceLog[] = [
   }
 ];
 
+/**
+ * Ultra-resilient fetch with automatic exponential backoff retry.
+ * Automatically recovers from serverless cold starts, Atlas reconnect delays, or transient packet drops.
+ */
+async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, baseDelay = 600): Promise<Response> {
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if ((res.status === 503 || res.status === 502 || res.status === 504) && attempt < retries) {
+        await new Promise(r => setTimeout(r, baseDelay * attempt));
+        continue;
+      }
+      return res;
+    } catch (err: any) {
+      lastError = err;
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, baseDelay * attempt));
+      }
+    }
+  }
+  throw lastError || new Error('Network request failed after retries');
+}
+
 export const StorageService = {
   getInitialState(): AppDatabaseState {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -312,7 +343,7 @@ export const StorageService = {
 
   // ===== INVESTORS =====
   async fetchInvestorsFromMongo(): Promise<InvestorRecord[]> {
-    const res = await fetch(`${API_BASE}/investors`);
+    const res = await fetchWithRetry(`${API_BASE}/investors`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Unknown error' }));
       console.error('❌ fetchInvestors failed:', err);
@@ -323,7 +354,7 @@ export const StorageService = {
   },
 
   async saveInvestorToMongo(record: InvestorRecord): Promise<{ success: boolean; data?: any; error?: string }> {
-    const res = await fetch(`${API_BASE}/investors`, {
+    const res = await fetchWithRetry(`${API_BASE}/investors`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(record)
@@ -339,7 +370,7 @@ export const StorageService = {
   },
 
   async updateInvestorToMongo(id: string, record: Partial<InvestorRecord>): Promise<{ success: boolean; data?: any; error?: string }> {
-    const res = await fetch(`${API_BASE}/investors/${id}`, {
+    const res = await fetchWithRetry(`${API_BASE}/investors/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(record)
@@ -354,13 +385,17 @@ export const StorageService = {
   },
 
   async deleteInvestorFromMongo(id: string): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/investors/${id}`, { method: 'DELETE' });
-    return res.ok;
+    try {
+      const res = await fetchWithRetry(`${API_BASE}/investors/${id}`, { method: 'DELETE' });
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   // ===== CUSTOMER RENTALS =====
   async fetchCustomerRentalsFromMongo(): Promise<CustomerRentalRecord[]> {
-    const res = await fetch(`${API_BASE}/customer-rentals`);
+    const res = await fetchWithRetry(`${API_BASE}/customer-rentals`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Unknown error' }));
       console.error('❌ fetchCustomerRentals failed:', err);
@@ -371,7 +406,7 @@ export const StorageService = {
   },
 
   async saveCustomerRentalToMongo(record: CustomerRentalRecord): Promise<{ success: boolean; data?: any; error?: string }> {
-    const res = await fetch(`${API_BASE}/customer-rentals`, {
+    const res = await fetchWithRetry(`${API_BASE}/customer-rentals`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(record)
@@ -387,7 +422,7 @@ export const StorageService = {
   },
 
   async updateCustomerRentalToMongo(id: string, record: Partial<CustomerRentalRecord>): Promise<{ success: boolean; data?: any; error?: string }> {
-    const res = await fetch(`${API_BASE}/customer-rentals/${id}`, {
+    const res = await fetchWithRetry(`${API_BASE}/customer-rentals/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(record)
@@ -402,13 +437,17 @@ export const StorageService = {
   },
 
   async deleteCustomerRentalFromMongo(id: string): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/customer-rentals/${id}`, { method: 'DELETE' });
-    return res.ok;
+    try {
+      const res = await fetchWithRetry(`${API_BASE}/customer-rentals/${id}`, { method: 'DELETE' });
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   // ===== MAINTENANCE =====
   async fetchMaintenanceFromMongo(): Promise<VehicleMaintenanceLog[]> {
-    const res = await fetch(`${API_BASE}/maintenance`);
+    const res = await fetchWithRetry(`${API_BASE}/maintenance`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Unknown error' }));
       console.error('❌ fetchMaintenance failed:', err);
@@ -419,7 +458,7 @@ export const StorageService = {
   },
 
   async saveMaintenanceToMongo(record: VehicleMaintenanceLog): Promise<{ success: boolean; data?: any; error?: string }> {
-    const res = await fetch(`${API_BASE}/maintenance`, {
+    const res = await fetchWithRetry(`${API_BASE}/maintenance`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(record)
@@ -435,7 +474,7 @@ export const StorageService = {
   },
 
   async updateMaintenanceToMongo(id: string, record: Partial<VehicleMaintenanceLog>): Promise<{ success: boolean; data?: any; error?: string }> {
-    const res = await fetch(`${API_BASE}/maintenance/${id}`, {
+    const res = await fetchWithRetry(`${API_BASE}/maintenance/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(record)
@@ -450,16 +489,20 @@ export const StorageService = {
   },
 
   async deleteMaintenanceFromMongo(id: string): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/maintenance/${id}`, { method: 'DELETE' });
-    return res.ok;
+    try {
+      const res = await fetchWithRetry(`${API_BASE}/maintenance/${id}`, { method: 'DELETE' });
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   // ===== HEALTH CHECK =====
   async checkDbHealth(): Promise<{ connected: boolean; status: string }> {
     try {
-      const res = await fetch(`${API_BASE}/health`);
+      const res = await fetchWithRetry(`${API_BASE}/health`, {}, 2, 400);
       const data = await res.json();
-      return { connected: data.database?.includes('CONNECTED'), status: data.database };
+      return { connected: data.db?.includes('CONNECTED') || data.database?.includes('CONNECTED') || data.status === 'OK', status: data.db || data.database || 'OK' };
     } catch {
       return { connected: false, status: 'Server not reachable' };
     }

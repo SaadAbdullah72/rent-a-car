@@ -90,37 +90,80 @@ const Investor        = mongoose.models.Investor        || mongoose.model('Inves
 const CustomerRental  = mongoose.models.CustomerRental  || mongoose.model('CustomerRental',  CustomerRentalSchema);
 const MaintenanceRecord = mongoose.models.MaintenanceRecord || mongoose.model('MaintenanceRecord', MaintenanceSchema);
 
-// ─── SERVERLESS-SAFE MONGODB CONNECTION (with global cache) ──────────────────
-let _conn = null;
+// ─── SERVERLESS-SAFE MONGODB CONNECTION (with global cache & auto-reconnect) ──
+global._mongooseCache = global._mongooseCache || { conn: null, promise: null };
 
-async function connectDB() {
-  if (!MONGODB_URI) throw new Error('MONGODB_URI environment variable is not set. Please add it in Vercel Project Settings → Environment Variables.');
+const MONGO_OPTIONS = {
+  serverSelectionTimeoutMS: 15000,
+  socketTimeoutMS:          45000,
+  connectTimeoutMS:         20000,
+  maxPoolSize:              10,
+  minPoolSize:              1,
+  maxIdleTimeMS:            60000,
+  heartbeatFrequencyMS:     10000,
+  retryWrites:              true,
+  retryReads:               true,
+  autoIndex:                false,
+};
 
-  // Already connected
-  if (_conn && mongoose.connection.readyState === 1) return _conn;
+// Listeners to auto-heal disconnected state
+mongoose.connection.on('connected', () => {
+  console.log('✅ MongoDB connection established');
+});
+mongoose.connection.on('error', (err) => {
+  console.error('❌ MongoDB error:', err.message);
+});
+mongoose.connection.on('disconnected', () => {
+  console.warn('⚠️ MongoDB disconnected, resetting cached connection...');
+  if (global._mongooseCache) {
+    global._mongooseCache.conn = null;
+    global._mongooseCache.promise = null;
+  }
+});
 
-  // Wait for existing promise if any
-  if (mongoose.connection.readyState === 2) {
-    await new Promise(r => mongoose.connection.once('connected', r));
-    _conn = mongoose.connection;
-    return _conn;
+async function connectDB(retries = 3, delay = 1000) {
+  if (!MONGODB_URI) {
+    throw new Error('MONGODB_URI environment variable is not set. Please add it in Vercel Project Settings → Environment Variables.');
   }
 
-  _conn = await mongoose.connect(MONGODB_URI, {
-    serverSelectionTimeoutMS: 8000,
-    socketTimeoutMS:          30000,
-    maxPoolSize:              5,
-    bufferCommands:           false,
-  });
-  console.log('✅ MongoDB connected');
+  // If already connected, return cached connection immediately
+  if (global._mongooseCache.conn && mongoose.connection.readyState === 1) {
+    return global._mongooseCache.conn;
+  }
 
-  // Auto-seed if empty
-  try {
-    const count = await Investor.countDocuments();
-    if (count === 0) await seedDatabase();
-  } catch (e) { /* ignore seed errors */ }
+  // If connection is already in-flight, await the existing promise
+  if (global._mongooseCache.promise) {
+    try {
+      global._mongooseCache.conn = await global._mongooseCache.promise;
+      if (mongoose.connection.readyState === 1) {
+        return global._mongooseCache.conn;
+      }
+    } catch (e) {
+      global._mongooseCache.promise = null;
+    }
+  }
 
-  return _conn;
+  // Retry loop with exponential backoff
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      global._mongooseCache.promise = mongoose.connect(MONGODB_URI, MONGO_OPTIONS);
+      global._mongooseCache.conn = await global._mongooseCache.promise;
+
+      // Auto-seed if empty on initial connect
+      try {
+        const count = await Investor.countDocuments();
+        if (count === 0) await seedDatabase();
+      } catch (e) { /* ignore seed errors */ }
+
+      return global._mongooseCache.conn;
+    } catch (err) {
+      global._mongooseCache.promise = null;
+      global._mongooseCache.conn = null;
+      console.error(`MongoDB connect attempt ${attempt}/${retries} failed:`, err.message);
+      if (attempt === retries) throw err;
+      await new Promise(res => setTimeout(res, delay * attempt));
+    }
+  }
 }
 
 async function seedDatabase() {
