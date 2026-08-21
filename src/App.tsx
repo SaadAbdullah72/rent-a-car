@@ -132,7 +132,17 @@ export function App() {
   const [custEndDate, setCustEndDate] = useState(todayIso);
   const [custTotalPrice, setCustTotalPrice] = useState('');
   const [custAdvancePaid, setCustAdvancePaid] = useState('');
+  const [custStartOdometer, setCustStartOdometer] = useState('0');
+  const [custAllowedKmThreshold, setCustAllowedKmThreshold] = useState('200'); // Default 200 KM per day
+  const [custExtraKmRate, setCustExtraKmRate] = useState('25'); // Default Rs. 25 per excess KM
   const [custNotes, setCustNotes] = useState('');
+
+  // --- VEHICLE RETURN / METER READING SETTLEMENT MODAL STATE ---
+  const [returnModalRental, setReturnModalRental] = useState<CustomerRentalRecord | null>(null);
+  const [returnEndOdometer, setReturnEndOdometer] = useState<string>('');
+  const [returnOtherCharges, setReturnOtherCharges] = useState<string>('0');
+  const [returnNotes, setReturnNotes] = useState<string>('');
+  const [returnDate, setReturnDate] = useState<string>(todayIso);
 
   // --- FORM STATE 3: MAINTENANCE LOG FORM ---
   const [maintSelectedPlate, setMaintSelectedPlate] = useState('');
@@ -650,6 +660,9 @@ export function App() {
     const numTotal = parseFloat(custTotalPrice) || 0;
     const numAdv = parseFloat(custAdvancePaid) || 0;
     const numBal = Math.max(0, numTotal - numAdv);
+    const startOdo = parseFloat(custStartOdometer) || 0;
+    const dailyKmThreshold = parseFloat(custAllowedKmThreshold) || 200;
+    const ratePerExtraKm = parseFloat(custExtraKmRate) || 25;
 
     const record: CustomerRentalRecord = {
       id: `rent-${Date.now()}`,
@@ -670,6 +683,13 @@ export function App() {
       advancePaid: numAdv,
       balanceDue: numBal,
       paymentStatus: numBal === 0 && numTotal > 0 ? 'PAID_FULL' : 'PENDING',
+      startOdometer: startOdo,
+      allowedKmThreshold: dailyKmThreshold,
+      extraKmRate: ratePerExtraKm,
+      extraKmDriven: 0,
+      extraKmCharges: 0,
+      otherCharges: 0,
+      isReturned: false,
       notes: custNotes.trim(),
       createdAt: new Date().toISOString()
     };
@@ -691,19 +711,19 @@ export function App() {
         setCustCarNameModel(''); setCustCarPlateNumber('');
         setCustStartDate(todayIso); setCustEndDate(todayIso);
         setCustTotalPrice(''); setCustAdvancePaid(''); setCustNotes('');
+        setCustStartOdometer('0'); setCustAllowedKmThreshold('200'); setCustExtraKmRate('25');
 
         // 3. Show verified database success popup
         setShowSuccessModal({
           title: 'Customer Rental Booking Saved in Database!',
-          subtitle: 'Vehicle rental agreement, guarantor verification, and customer balance ledger saved to MongoDB Cloud.',
+          subtitle: 'Vehicle rental agreement, meter readings, guarantor verification, and customer ledger saved to MongoDB Cloud.',
           targetTab: 'customer-directory',
           details: [
             { label: 'Customer Name', value: record.customerName },
             { label: 'CNIC Number', value: record.customerCnic },
             { label: 'Guarantor / Zamin', value: `${record.guarantorName || 'N/A'}${record.guarantorFatherName ? ` (S/O ${record.guarantorFatherName})` : ''}` },
-            { label: 'Guarantor CNIC / Phone', value: `${record.guarantorCnic || 'N/A'}${record.guarantorPhone ? ` / ${record.guarantorPhone}` : ''}` },
-            { label: 'Guarantor Address', value: record.guarantorAddress || 'N/A' },
             { label: 'Vehicle Rented', value: `${record.carNameModel} [${record.carPlateNumber}]` },
+            { label: 'Start Meter Reading', value: `${record.startOdometer?.toLocaleString()} KM (Limit: ${record.allowedKmThreshold} KM/day)` },
             { label: 'Total Rent / Balance Due', value: `Rs. ${record.totalPrice.toLocaleString()} (Due: Rs. ${record.balanceDue.toLocaleString()})` },
             { label: 'Database Status', value: 'Saved & Verified in MongoDB' }
           ]
@@ -716,6 +736,83 @@ export function App() {
       }
     } catch (err: any) {
       showNotification(`Network/Server Error: ${err.message || 'Failed to connect to database.'}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // --- VEHICLE RETURN & METER READING HANDLERS ---
+  const openVehicleReturnModal = (rental: CustomerRentalRecord) => {
+    setReturnModalRental(rental);
+    setReturnEndOdometer(rental.endOdometer ? String(rental.endOdometer) : String(rental.startOdometer || 0));
+    setReturnOtherCharges(rental.otherCharges !== undefined ? String(rental.otherCharges) : '0');
+    setReturnNotes(rental.returnNotes || '');
+    setReturnDate(rental.returnDate || todayIso);
+  };
+
+  const handleConfirmVehicleReturn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!returnModalRental) return;
+
+    const rentalId = returnModalRental._id || returnModalRental.id || '';
+    const startOdo = returnModalRental.startOdometer || 0;
+    const endOdo = parseFloat(returnEndOdometer) || startOdo;
+
+    if (endOdo < startOdo) {
+      showNotification(`Return meter reading (${endOdo.toLocaleString()} KM) cannot be less than start meter reading (${startOdo.toLocaleString()} KM).`, 'error');
+      return;
+    }
+
+    const totalKm = Math.max(0, endOdo - startOdo);
+    const dailyThreshold = returnModalRental.allowedKmThreshold !== undefined ? returnModalRental.allowedKmThreshold : 200;
+    const days = returnModalRental.totalDays || 1;
+    const totalAllowedKm = dailyThreshold * days;
+    const extraKm = Math.max(0, totalKm - totalAllowedKm);
+    const extraRate = returnModalRental.extraKmRate !== undefined ? returnModalRental.extraKmRate : 25;
+    const extraSurcharge = extraKm * extraRate;
+    const otherFee = parseFloat(returnOtherCharges) || 0;
+
+    // Previous extra charges (if recalculating an already returned vehicle)
+    const prevExtra = returnModalRental.extraKmCharges || 0;
+    const prevOther = returnModalRental.otherCharges || 0;
+    const baseRentalAmount = Math.max(0, returnModalRental.totalPrice - prevExtra - prevOther);
+
+    const newTotalPrice = baseRentalAmount + extraSurcharge + otherFee;
+    const advPaid = returnModalRental.advancePaid || 0;
+    const newBalanceDue = Math.max(0, newTotalPrice - advPaid);
+    const newPaymentStatus = newBalanceDue === 0 && newTotalPrice > 0 ? 'PAID_FULL' : 'PENDING';
+
+    const updatedRecord: CustomerRentalRecord = {
+      ...returnModalRental,
+      endOdometer: endOdo,
+      totalKmDriven: totalKm,
+      extraKmDriven: extraKm,
+      extraKmCharges: extraSurcharge,
+      otherCharges: otherFee,
+      totalPrice: newTotalPrice,
+      balanceDue: newBalanceDue,
+      paymentStatus: newPaymentStatus,
+      isReturned: true,
+      returnDate: returnDate || todayIso,
+      returnNotes: returnNotes.trim()
+    };
+
+    setIsSaving(true);
+    try {
+      const res = await StorageService.updateCustomerRentalToMongo(rentalId, updatedRecord);
+      if (res.success) {
+        setCustomerRentals(prev => prev.map(r => (r._id || r.id) === rentalId ? { ...r, ...updatedRecord } : r));
+        setReturnModalRental(null);
+        showNotification(
+          `Vehicle Return Recorded! Travelled: ${totalKm.toLocaleString()} KM ${extraKm > 0 ? `(Extra: ${extraKm.toLocaleString()} KM = +Rs. ${extraSurcharge.toLocaleString()})` : ''}. Balance Due: Rs. ${newBalanceDue.toLocaleString()}`,
+          'success'
+        );
+        await refreshAllData();
+      } else {
+        showNotification(`Database Error: Could not update vehicle return. ${res.error || ''}`, 'error');
+      }
+    } catch (err: any) {
+      showNotification(`Server Error: ${err.message || 'Failed to update vehicle return.'}`, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -2346,6 +2443,73 @@ export function App() {
                     />
                   </div>
                 </div>
+
+                {/* Meter Reading & Mileage Threshold Limits */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-serif pt-3 border-t border-slate-200">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1 font-serif">
+                      Start Meter Reading (KM at Dispatch) *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      required
+                      placeholder="e.g. 45000"
+                      value={custStartOdometer}
+                      onChange={(e) => setCustStartOdometer(e.target.value)}
+                      className="w-full custom-input font-bold font-serif font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1 font-serif">
+                      Daily Allowed KM Limit (Threshold) *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        required
+                        placeholder="e.g. 200"
+                        value={custAllowedKmThreshold}
+                        onChange={(e) => setCustAllowedKmThreshold(e.target.value)}
+                        className="w-full custom-input font-bold font-serif font-mono pr-16"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-500">
+                        KM/Day
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 mt-1 block font-serif">
+                      Total Limit: <strong className="text-slate-800 font-mono">{(parseFloat(custAllowedKmThreshold) || 200) * calculatedCustDays} KM</strong> for {calculatedCustDays} Days
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1 font-serif">
+                      Extra KM Surcharge Rate (Rs./KM) *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        required
+                        placeholder="e.g. 25"
+                        value={custExtraKmRate}
+                        onChange={(e) => setCustExtraKmRate(e.target.value)}
+                        className="w-full custom-input font-bold font-serif font-mono pr-16"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-500">
+                        Rs./KM
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 mt-1 block font-serif">
+                      Auto-calculated upon vehicle return
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* Section E: Rental Charges & Payment Accounting */}
@@ -2496,8 +2660,8 @@ export function App() {
                       <th className="p-3 border-r border-slate-200">#</th>
                       <th className="p-3 border-r border-slate-200">Customer Details</th>
                       <th className="p-3 border-r border-slate-200">Guarantor / Zamin (ضامن)</th>
-                      <th className="p-3 border-r border-slate-200">Vehicle Rented</th>
-                      <th className="p-3 border-r border-slate-200">Plate Number</th>
+                      <th className="p-3 border-r border-slate-200">Vehicle & Plate</th>
+                      <th className="p-3 border-r border-slate-200">Meter & Distance (میٹر ریڈنگ)</th>
                       <th className="p-3 border-r border-slate-200">Rental Period</th>
                       <th className="p-3 border-r border-slate-200">Total Price</th>
                       <th className="p-3 border-r border-slate-200">Advance Paid</th>
@@ -2511,6 +2675,7 @@ export function App() {
                       const rId = r._id || r.id || '';
                       const isPaid = r.paymentStatus === 'PAID_FULL';
                       const bal = isPaid ? 0 : (r.balanceDue !== undefined ? r.balanceDue : Math.max(0, r.totalPrice - r.advancePaid));
+                      const totalAllowedKm = (r.allowedKmThreshold || 200) * (r.totalDays || 1);
 
                       return (
                         <tr key={rId} className="hover:bg-slate-50 transition font-serif">
@@ -2558,7 +2723,7 @@ export function App() {
                                   </div>
                                 )}
                                 {r.guarantorAddress && (
-                                  <div className="text-[10px] text-slate-500 truncate max-w-[200px]" title={r.guarantorAddress}>
+                                  <div className="text-[10px] text-slate-500 truncate max-w-[180px]" title={r.guarantorAddress}>
                                     📍 {r.guarantorAddress}
                                   </div>
                                 )}
@@ -2567,25 +2732,64 @@ export function App() {
                               <span className="text-slate-400 italic text-[11px]">No Guarantor</span>
                             )}
                           </td>
-                          <td className="p-3 border-r border-slate-200 font-bold font-serif">
-                            {r.carNameModel}
-                          </td>
-                          <td className="p-3 border-r border-slate-200 font-bold uppercase font-mono font-serif">
+                          <td className="p-3 border-r border-slate-200 font-serif">
+                            <div className="font-bold text-slate-900">{r.carNameModel}</div>
                             <button
                               onClick={() => {
                                 setSelectedLookupPlate(r.carPlateNumber);
                                 setActiveTab('vehicle-360');
                               }}
-                              className="underline hover:text-indigo-800 font-serif text-left"
+                              className="font-mono text-xs font-bold text-indigo-900 hover:underline block mt-0.5"
                             >
-                              {r.carPlateNumber}
+                              [{r.carPlateNumber}]
                             </button>
                           </td>
+
+                          {/* Meter Readings & Distance Column */}
                           <td className="p-3 border-r border-slate-200 text-[11px] font-serif">
-                            {r.startDate} to {r.endDate} ({r.totalDays} Days)
+                            {r.isReturned ? (
+                              <div className="space-y-0.5">
+                                <div>
+                                  <span className="text-slate-500">Start:</span> <strong className="font-mono">{r.startOdometer?.toLocaleString()} KM</strong>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500">Return:</span> <strong className="font-mono text-emerald-800">{r.endOdometer?.toLocaleString()} KM</strong>
+                                </div>
+                                <div className="font-bold text-slate-900 border-t border-slate-200 pt-0.5">
+                                  Driven: <span className="font-mono text-indigo-950">{r.totalKmDriven?.toLocaleString()} KM</span>
+                                </div>
+                                {(r.extraKmDriven || 0) > 0 && (
+                                  <div className="text-[10px] font-bold text-rose-700">
+                                    Extra: +{r.extraKmDriven?.toLocaleString()} KM (+Rs. {r.extraKmCharges?.toLocaleString()})
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="space-y-0.5">
+                                <div>
+                                  <span className="text-slate-500">Start KM:</span> <strong className="font-mono">{r.startOdometer?.toLocaleString() || 0} KM</strong>
+                                </div>
+                                <div className="text-slate-500 text-[10px]">
+                                  Limit: {r.allowedKmThreshold || 200} KM/day ({totalAllowedKm} KM total)
+                                </div>
+                                <div className="text-[10px] text-amber-800 font-medium pt-0.5">
+                                  ⏳ Vehicle on road
+                                </div>
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="p-3 border-r border-slate-200 text-[11px] font-serif">
+                            <div>{r.startDate} to {r.endDate}</div>
+                            <span className="font-bold text-slate-600">({r.totalDays} Days)</span>
                           </td>
                           <td className="p-3 border-r border-slate-200 font-bold text-slate-900 font-serif">
-                            Rs. {(r.totalPrice || 0).toLocaleString()}
+                            <div>Rs. {(r.totalPrice || 0).toLocaleString()}</div>
+                            {(r.extraKmCharges || 0) > 0 && (
+                              <span className="text-[10px] text-rose-700 block font-normal">
+                                Incl. Extra KM: Rs. {r.extraKmCharges?.toLocaleString()}
+                              </span>
+                            )}
                           </td>
                           <td className="p-3 border-r border-slate-200 font-bold text-emerald-800 font-serif">
                             Rs. {(r.advancePaid || 0).toLocaleString()}
@@ -2593,36 +2797,67 @@ export function App() {
                           <td className="p-3 border-r border-slate-200 font-bold text-rose-800 font-serif">
                             Rs. {bal.toLocaleString()}
                           </td>
-                          <td className="p-3 border-r border-slate-200 font-serif">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-serif ${
-                              isPaid ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-amber-100 text-amber-900 border border-amber-300'
+                          <td className="p-3 border-r border-slate-200 font-serif space-y-1">
+                            {r.isReturned ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-300 block text-center">
+                                ✓ RETURNED
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 block text-center">
+                                ⏳ ON RENT
+                              </span>
+                            )}
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold block text-center ${
+                              isPaid ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-rose-100 text-rose-900 border border-rose-300'
                             }`}>
-                              {isPaid ? 'PAID IN FULL' : 'PENDING DUE'}
+                              {isPaid ? 'PAID FULL' : 'PENDING'}
                             </span>
                           </td>
-                          <td className="p-3 text-center space-x-1 font-serif">
-                            <button
-                              onClick={() => handleToggleCustomerPaymentStatus(rId)}
-                              className={`px-2.5 py-1 text-[11px] font-bold rounded transition font-serif ${
-                                isPaid ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-emerald-800 text-white hover:bg-emerald-900'
-                              }`}
-                            >
-                              {isPaid ? 'Paid' : 'Mark Paid'}
-                            </button>
+                          <td className="p-3 text-center space-y-1 font-serif">
+                            <div className="flex flex-col gap-1 items-center justify-center font-serif">
+                              {!r.isReturned ? (
+                                <button
+                                  onClick={() => openVehicleReturnModal(r)}
+                                  className="w-full px-2.5 py-1 text-[11px] font-bold bg-indigo-900 hover:bg-indigo-950 text-white rounded transition font-serif shadow-xs"
+                                  title="Receive Vehicle Return and enter Return Meter Reading"
+                                >
+                                  🚗 Vehicle Returned
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => openVehicleReturnModal(r)}
+                                  className="w-full px-2 py-0.5 text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded transition font-serif"
+                                  title="View or update return meter readings"
+                                >
+                                  ⚙️ Meter Details
+                                </button>
+                              )}
 
-                            <button
-                              onClick={() => setEditingModal({ type: 'customer', data: JSON.parse(JSON.stringify(r)) })}
-                              className="px-2 py-1 text-[11px] font-bold bg-white border border-slate-300 hover:bg-slate-100 text-slate-900 rounded font-serif"
-                            >
-                              Edit
-                            </button>
+                              <div className="flex items-center gap-1 w-full justify-center">
+                                <button
+                                  onClick={() => handleToggleCustomerPaymentStatus(rId)}
+                                  className={`flex-1 px-2 py-1 text-[11px] font-bold rounded transition font-serif ${
+                                    isPaid ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-emerald-800 text-white hover:bg-emerald-900'
+                                  }`}
+                                >
+                                  {isPaid ? 'Paid' : 'Mark Paid'}
+                                </button>
 
-                            <button
-                              onClick={() => handleDeleteCustomerRental(rId, r.customerName, r.carPlateNumber)}
-                              className="px-2 py-1 text-[11px] font-bold text-rose-800 hover:bg-rose-100 bg-rose-50 border border-rose-200 rounded transition font-serif"
-                            >
-                              Delete
-                            </button>
+                                <button
+                                  onClick={() => setEditingModal({ type: 'customer', data: JSON.parse(JSON.stringify(r)) })}
+                                  className="px-2 py-1 text-[11px] font-bold bg-white border border-slate-300 hover:bg-slate-100 text-slate-900 rounded font-serif"
+                                >
+                                  Edit
+                                </button>
+
+                                <button
+                                  onClick={() => handleDeleteCustomerRental(rId, r.customerName, r.carPlateNumber)}
+                                  className="px-2 py-1 text-[11px] font-bold text-rose-800 hover:bg-rose-100 bg-rose-50 border border-rose-200 rounded transition font-serif"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -3544,7 +3779,7 @@ export function App() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-serif">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 text-xs font-serif">
                   {/* Card 1: Vehicle & Schedule */}
                   <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-2 font-serif">
                     <div className="font-bold text-slate-900 text-sm font-serif border-b border-slate-100 pb-1.5">
@@ -3561,7 +3796,56 @@ export function App() {
                     )}
                   </div>
 
-                  {/* Card 2: Guarantor Verification */}
+                  {/* Card 2: Meter Reading & Mileage Inspection */}
+                  <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-2 font-serif">
+                    <div className="font-bold text-slate-900 text-sm font-serif border-b border-slate-100 pb-1.5 flex items-center justify-between">
+                      <span>📟 Meter & Mileage (میٹر)</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        selectedCustomerProfile.isReturned ? 'bg-blue-100 text-blue-900' : 'bg-amber-100 text-amber-900'
+                      }`}>
+                        {selectedCustomerProfile.isReturned ? '✓ Returned' : '⏳ On Road'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div>
+                        Start Meter: <strong className="font-mono">{selectedCustomerProfile.startOdometer?.toLocaleString() || 0} KM</strong>
+                      </div>
+                      <div>
+                        Return Meter:{' '}
+                        <strong className="font-mono text-emerald-800">
+                          {selectedCustomerProfile.isReturned && selectedCustomerProfile.endOdometer !== undefined
+                            ? `${selectedCustomerProfile.endOdometer.toLocaleString()} KM`
+                            : 'Pending Return'}
+                        </strong>
+                      </div>
+                      <div>
+                        Total Distance:{' '}
+                        <strong className="font-mono text-indigo-950">
+                          {selectedCustomerProfile.isReturned && selectedCustomerProfile.totalKmDriven !== undefined
+                            ? `${selectedCustomerProfile.totalKmDriven.toLocaleString()} KM`
+                            : 'In Progress'}
+                        </strong>
+                      </div>
+                      <div className="text-slate-600 text-[11px]">
+                        Allowed Limit: <strong className="font-mono">{(selectedCustomerProfile.allowedKmThreshold || 200) * (selectedCustomerProfile.totalDays || 1)} KM</strong> ({selectedCustomerProfile.allowedKmThreshold || 200} KM/day)
+                      </div>
+                      {(selectedCustomerProfile.extraKmDriven || 0) > 0 && (
+                        <div className="text-rose-800 font-bold bg-rose-50 border border-rose-200 p-1.5 rounded text-[11px]">
+                          Extra: +{selectedCustomerProfile.extraKmDriven?.toLocaleString()} KM (+Rs. {selectedCustomerProfile.extraKmCharges?.toLocaleString()})
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => openVehicleReturnModal(selectedCustomerProfile)}
+                        className="w-full mt-2 px-2.5 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white rounded font-bold text-xs transition font-serif shadow-xs"
+                      >
+                        {selectedCustomerProfile.isReturned ? '⚙️ Update Meter Readings' : '🚗 Record Vehicle Return'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Guarantor Verification */}
                   <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-2 font-serif">
                     <div className="font-bold text-slate-900 text-sm font-serif border-b border-slate-100 pb-1.5 flex items-center justify-between">
                       <span>🛡️ Guarantor Details (ضامن)</span>
@@ -3596,15 +3880,25 @@ export function App() {
                     )}
                   </div>
 
-                  {/* Card 3: Financial Accounting */}
+                  {/* Card 4: Financial Accounting */}
                   <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-2 font-serif">
                     <div className="font-bold text-slate-900 text-sm font-serif border-b border-slate-100 pb-1.5">
                       💰 Financial Accounting
                     </div>
                     <div>Total Rent Charged: <strong>Rs. {selectedCustomerProfile.totalPrice.toLocaleString()}</strong></div>
+                    {(selectedCustomerProfile.extraKmCharges || 0) > 0 && (
+                      <div className="text-rose-800 text-[11px]">
+                        Extra KM Charge: <strong>Rs. {selectedCustomerProfile.extraKmCharges?.toLocaleString()}</strong>
+                      </div>
+                    )}
+                    {(selectedCustomerProfile.otherCharges || 0) > 0 && (
+                      <div className="text-amber-800 text-[11px]">
+                        Other Surcharges: <strong>Rs. {selectedCustomerProfile.otherCharges?.toLocaleString()}</strong>
+                      </div>
+                    )}
                     <div className="text-emerald-800 font-bold">Advance Paid: Rs. {selectedCustomerProfile.advancePaid.toLocaleString()}</div>
                     <div className="text-rose-800 font-bold">Balance Due: Rs. {selectedCustomerProfile.balanceDue.toLocaleString()}</div>
-                    <div>
+                    <div className="pt-1">
                       Payment Status:{' '}
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-serif ${
                         selectedCustomerProfile.paymentStatus === 'PAID_FULL' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-amber-100 text-amber-900 border border-amber-300'
@@ -4013,6 +4307,96 @@ export function App() {
                       </div>
                     </div>
 
+                    {/* METER READINGS & MILEAGE THRESHOLD SETTLEMENT */}
+                    <div className="p-3 bg-[#faf9f5] border border-slate-200 rounded-lg space-y-3 font-serif">
+                      <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wide border-b border-slate-200 pb-1 font-serif">
+                        Meter Readings & Mileage Inspection
+                      </h4>
+
+                      <div className="grid grid-cols-2 gap-3 font-serif">
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1 font-serif">Start Meter (KM) *</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={editingModal.data.startOdometer || 0}
+                            onChange={(e) => setEditingModal({ ...editingModal, data: { ...editingModal.data, startOdometer: parseFloat(e.target.value) || 0 } })}
+                            className="w-full custom-input font-bold font-mono font-serif"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1 font-serif">Return Meter (KM)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="e.g. 45500"
+                            value={editingModal.data.endOdometer || ''}
+                            onChange={(e) => {
+                              const end = parseFloat(e.target.value) || 0;
+                              const start = editingModal.data.startOdometer || 0;
+                              const driven = Math.max(0, end - start);
+                              const daily = editingModal.data.allowedKmThreshold || 200;
+                              const days = editingModal.data.totalDays || 1;
+                              const allowed = daily * days;
+                              const extraKm = Math.max(0, driven - allowed);
+                              const rate = editingModal.data.extraKmRate || 25;
+                              const extraCharges = extraKm * rate;
+                              setEditingModal({
+                                ...editingModal,
+                                data: {
+                                  ...editingModal.data,
+                                  endOdometer: end,
+                                  totalKmDriven: driven,
+                                  extraKmDriven: extraKm,
+                                  extraKmCharges: extraCharges,
+                                  isReturned: end > start
+                                }
+                              });
+                            }}
+                            className="w-full custom-input font-bold font-mono font-serif"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 font-serif">
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1 font-serif">Daily Allowed Limit (KM/day)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={editingModal.data.allowedKmThreshold || 200}
+                            onChange={(e) => setEditingModal({ ...editingModal, data: { ...editingModal.data, allowedKmThreshold: parseFloat(e.target.value) || 200 } })}
+                            className="w-full custom-input font-bold font-mono font-serif"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1 font-serif">Extra KM Surcharge Rate (Rs./KM)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={editingModal.data.extraKmRate || 25}
+                            onChange={(e) => setEditingModal({ ...editingModal, data: { ...editingModal.data, extraKmRate: parseFloat(e.target.value) || 25 } })}
+                            className="w-full custom-input font-bold font-mono font-serif"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded font-serif text-[11px]">
+                        <span>Vehicle Return Status:</span>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!editingModal.data.isReturned}
+                            onChange={(e) => setEditingModal({ ...editingModal, data: { ...editingModal.data, isReturned: e.target.checked } })}
+                            className="rounded text-indigo-900 focus:ring-indigo-900"
+                          />
+                          <span className="font-bold text-slate-900">Marked as Returned</span>
+                        </label>
+                      </div>
+                    </div>
+
                     {/* FINANCIAL BALANCES */}
                     <div className="p-3 bg-[#faf9f5] border border-slate-200 rounded-lg space-y-3 font-serif">
                       <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wide border-b border-slate-200 pb-1 font-serif">
@@ -4329,16 +4713,255 @@ export function App() {
                 </button>
               </div>
 
-
             </div>
           </div>
         )}
 
 
+        {/* VEHICLE RETURN & METER READING SETTLEMENT MODAL DIALOG */}
+        {returnModalRental && (() => {
+          const startOdo = returnModalRental.startOdometer || 0;
+          const endOdo = parseFloat(returnEndOdometer) || startOdo;
+          const totalKm = Math.max(0, endOdo - startOdo);
+          const dailyThreshold = returnModalRental.allowedKmThreshold !== undefined ? returnModalRental.allowedKmThreshold : 200;
+          const days = returnModalRental.totalDays || 1;
+          const totalAllowedKm = dailyThreshold * days;
+          const extraKm = Math.max(0, totalKm - totalAllowedKm);
+          const extraRate = returnModalRental.extraKmRate !== undefined ? returnModalRental.extraKmRate : 25;
+          const extraSurcharge = extraKm * extraRate;
+          const otherFee = parseFloat(returnOtherCharges) || 0;
+
+          const prevExtra = returnModalRental.extraKmCharges || 0;
+          const prevOther = returnModalRental.otherCharges || 0;
+          const baseRentalAmount = Math.max(0, (returnModalRental.totalPrice || 0) - prevExtra - prevOther);
+
+          const newTotalPrice = baseRentalAmount + extraSurcharge + otherFee;
+          const advPaid = returnModalRental.advancePaid || 0;
+          const newBalanceDue = Math.max(0, newTotalPrice - advPaid);
+
+          return (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-serif">
+              <div className="bg-white border border-slate-300 rounded-2xl p-6 max-w-2xl w-full max-h-[92vh] overflow-y-auto font-serif space-y-5 shadow-2xl">
+                
+                {/* Modal Header */}
+                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                      <span>🚗 Vehicle Return & Meter Settlement</span>
+                    </h3>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      گاڑی کی واپسی وصولی، فائنل میٹر ریڈنگ اور اضافی کلومیٹر کا خودکار حساب
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setReturnModalRental(null)}
+                    className="text-slate-500 hover:text-slate-900 font-bold text-xs border border-slate-200 px-2.5 py-1.5 rounded-lg"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+
+                {/* Booking Summary Header */}
+                <div className="p-3.5 bg-slate-900 text-white rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase">Customer</span>
+                    <strong className="text-white truncate block">{returnModalRental.customerName}</strong>
+                    <span className="text-slate-300 text-[11px] font-mono">{returnModalRental.customerCnic}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase">Vehicle</span>
+                    <strong className="text-white truncate block">{returnModalRental.carNameModel}</strong>
+                    <span className="text-slate-300 text-[11px] font-mono font-bold">{returnModalRental.carPlateNumber}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase">Rental Period</span>
+                    <strong className="text-white block">{returnModalRental.totalDays} Days</strong>
+                    <span className="text-slate-300 text-[10px]">{returnModalRental.startDate} to {returnModalRental.endDate}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase">Base Rent</span>
+                    <strong className="text-white block">Rs. {baseRentalAmount.toLocaleString()}</strong>
+                    <span className="text-emerald-400 text-[10px]">Adv Paid: Rs. {advPaid.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <form onSubmit={handleConfirmVehicleReturn} className="space-y-4 text-xs">
+                  {/* 1. Meter Reading Inputs */}
+                  <div className="p-4 bg-[#faf9f5] border border-slate-300 rounded-xl space-y-3">
+                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide border-b border-slate-200 pb-1.5 flex items-center justify-between">
+                      <span>1. Meter Readings & Mileage Inspection (میٹر ریڈنگ)</span>
+                      <span className="text-slate-500 font-normal text-[11px]">
+                        Allowed Limit: <strong>{totalAllowedKm} KM</strong> ({dailyThreshold} KM/day × {days} days)
+                      </span>
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">
+                          Start Meter Reading (KM at Dispatch)
+                        </label>
+                        <div className="p-2.5 bg-slate-100 border border-slate-300 rounded font-mono font-bold text-slate-800 text-sm">
+                          {startOdo.toLocaleString()} KM
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">
+                          Return / Final Meter Reading (KM) *
+                        </label>
+                        <input
+                          type="number"
+                          min={startOdo}
+                          step="1"
+                          required
+                          placeholder={`Min: ${startOdo}`}
+                          value={returnEndOdometer}
+                          onChange={(e) => setReturnEndOdometer(e.target.value)}
+                          className="w-full custom-input font-mono font-bold text-sm bg-white border-2 border-indigo-600 focus:border-indigo-800"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Live Mileage Calculation Box */}
+                    <div className="p-3 bg-white border border-slate-200 rounded-lg grid grid-cols-3 gap-2 text-center">
+                      <div className="p-2 bg-slate-50 rounded">
+                        <span className="text-slate-500 text-[10px] block uppercase font-bold">Total Distance Driven</span>
+                        <strong className="text-sm font-mono text-indigo-950">{totalKm.toLocaleString()} KM</strong>
+                      </div>
+                      <div className="p-2 bg-slate-50 rounded">
+                        <span className="text-slate-500 text-[10px] block uppercase font-bold">Allowed Threshold Limit</span>
+                        <strong className="text-sm font-mono text-slate-700">{totalAllowedKm.toLocaleString()} KM</strong>
+                      </div>
+                      <div className={`p-2 rounded ${extraKm > 0 ? 'bg-rose-50 border border-rose-200' : 'bg-emerald-50 border border-emerald-200'}`}>
+                        <span className="text-slate-500 text-[10px] block uppercase font-bold">
+                          {extraKm > 0 ? 'Excess Extra KM' : 'Within Limit'}
+                        </span>
+                        <strong className={`text-sm font-mono ${extraKm > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                          {extraKm > 0 ? `+${extraKm.toLocaleString()} KM` : '0 KM (No Extra)'}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. Charges & Final Payment Accounting */}
+                  <div className="p-4 bg-[#faf9f5] border border-slate-300 rounded-xl space-y-3">
+                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide border-b border-slate-200 pb-1.5">
+                      2. Charges & Final Payment Accounting (Rs.)
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">
+                          Extra KM Surcharge (@ Rs. {extraRate}/KM)
+                        </label>
+                        <div className={`p-2.5 rounded font-mono font-bold text-sm border ${
+                          extraSurcharge > 0 ? 'bg-rose-50 border-rose-300 text-rose-800' : 'bg-slate-100 border-slate-300 text-slate-600'
+                        }`}>
+                          + Rs. {extraSurcharge.toLocaleString()}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">
+                          Other Surcharges (Late / Damage / Fuel) (Rs.)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="e.g. 0"
+                          value={returnOtherCharges}
+                          onChange={(e) => setReturnOtherCharges(e.target.value)}
+                          className="w-full custom-input font-bold font-mono text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Final Ledger Summary */}
+                    <div className="p-3.5 bg-slate-900 text-white rounded-xl space-y-2">
+                      <div className="flex items-center justify-between text-slate-300 text-xs">
+                        <span>Original Base Rental Price:</span>
+                        <span className="font-mono">Rs. {baseRentalAmount.toLocaleString()}</span>
+                      </div>
+                      {extraSurcharge > 0 && (
+                        <div className="flex items-center justify-between text-rose-400 text-xs">
+                          <span>Extra KM Surcharge ({extraKm.toLocaleString()} KM × Rs. {extraRate}):</span>
+                          <span className="font-mono">+ Rs. {extraSurcharge.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {otherFee > 0 && (
+                        <div className="flex items-center justify-between text-amber-400 text-xs">
+                          <span>Other / Late Surcharges:</span>
+                          <span className="font-mono">+ Rs. {otherFee.toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-white font-bold border-t border-slate-800 pt-1.5 text-sm">
+                        <span>Updated Total Rental Price:</span>
+                        <span className="font-mono text-emerald-400">Rs. {newTotalPrice.toLocaleString()}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-300 text-xs">
+                        <span>Advance Already Paid:</span>
+                        <span className="font-mono text-emerald-300">- Rs. {advPaid.toLocaleString()}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-base font-bold bg-white/10 p-2 rounded-lg border border-white/20">
+                        <span className="text-white">Updated Remaining Balance Due:</span>
+                        <span className={`font-mono ${newBalanceDue === 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          Rs. {newBalanceDue.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Return Date & Remarks */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">Actual Return Date</label>
+                      <input
+                        type="date"
+                        value={returnDate}
+                        onChange={(e) => setReturnDate(e.target.value)}
+                        className="w-full custom-input font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">Return Inspection Remarks</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Vehicle returned clean, fuel level checked"
+                        value={returnNotes}
+                        onChange={(e) => setReturnNotes(e.target.value)}
+                        className="w-full custom-input"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setReturnModalRental(null)}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-lg transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="px-6 py-2.5 bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs rounded-lg transition shadow-md flex items-center gap-1.5"
+                    >
+                      {isSaving ? 'Saving...' : '✓ Confirm Vehicle Return & Update Ledger'}
+                    </button>
+                  </div>
+                </form>
+
+              </div>
+            </div>
+          );
+        })()}
+
       </div>
     </div>
   );
 }
-
 
 export default App;

@@ -72,6 +72,20 @@ const CustomerRentalSchema = new mongoose.Schema({
   advancePaid:         { type: Number, default: 0 },
   balanceDue:          { type: Number, default: 0 },
   paymentStatus:       { type: String, default: 'PENDING' },
+
+  // Meter Readings & Vehicle Return Settlement
+  startOdometer:       { type: Number, default: 0 },
+  endOdometer:         { type: Number, default: 0 },
+  totalKmDriven:       { type: Number, default: 0 },
+  allowedKmThreshold:  { type: Number, default: 200 },
+  extraKmRate:         { type: Number, default: 25 },
+  extraKmDriven:       { type: Number, default: 0 },
+  extraKmCharges:      { type: Number, default: 0 },
+  otherCharges:        { type: Number, default: 0 },
+  isReturned:          { type: Boolean, default: false },
+  returnDate:          { type: String, default: '' },
+  returnNotes:         { type: String, default: '' },
+
   notes:               { type: String, default: '' },
   createdAt:           { type: String, default: () => new Date().toISOString() }
 }, { timestamps: false, versionKey: false });

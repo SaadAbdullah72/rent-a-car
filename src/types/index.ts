@@ -20,6 +20,20 @@ export interface CustomerRentalRecord {
   advancePaid: number; // Advance Amount Paid (Rs.)
   balanceDue: number; // Computed: Total Price - Advance Paid (Rs.)
   paymentStatus?: PaymentStatusType; // 'PENDING' | 'PAID_FULL'
+  
+  // Meter Readings & Vehicle Return Settlement
+  startOdometer?: number; // Starting Odometer KM at dispatch
+  endOdometer?: number; // Final Odometer KM at return
+  totalKmDriven?: number; // endOdometer - startOdometer
+  allowedKmThreshold?: number; // Daily or total allowed KM limit (e.g. 200 KM/day)
+  extraKmRate?: number; // Surcharge per excess KM (e.g. Rs. 25/KM)
+  extraKmDriven?: number; // KM driven beyond allowed threshold
+  extraKmCharges?: number; // Extra KM Surcharge Amount (Rs.)
+  otherCharges?: number; // Late fee, damage, or fuel fee (Rs.)
+  isReturned?: boolean; // Whether car has been returned / submitted
+  returnDate?: string; // Actual return date (YYYY-MM-DD)
+  returnNotes?: string; // Condition inspection remarks
+  
   notes?: string;
   createdAt?: string;
 }
