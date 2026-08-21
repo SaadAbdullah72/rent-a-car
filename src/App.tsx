@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { InvestorRecord, VehicleItem, CustomerRentalRecord, VehicleMaintenanceLog, ActiveTab } from './types';
 import { StorageService, defaultSeedInvestors, defaultSeedCustomerRentals, defaultSeedMaintenance } from './services/storage';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 const SERVICE_OPTIONS = [
   'Oil & Filters Change',
@@ -1460,6 +1463,551 @@ export function App() {
       vehicleMatrix
     };
   }, [customerRentals, investorRecords, maintenanceLogs, reportDateRange, reportVehicleFilter, reportPaymentFilter]);
+
+  const handleDownloadFinancialPdf = () => {
+    const { start, end, label } = reportDateRange;
+    const data = reportFinancialData;
+
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    // 1. Executive Top Header Banner (Dark Navy)
+    doc.setFillColor(15, 23, 42); // #0f172a
+    doc.rect(0, 0, pageWidth, 28, 'F');
+
+    // Title & Subtitle
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('times', 'bold');
+    doc.setFontSize(16);
+    doc.text('AL-FALAH RENT A CAR & LUXURY FLEET MANAGEMENT', 14, 11);
+
+    doc.setFont('times', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(203, 213, 225);
+    doc.text('Executive Financial Statement & Audited Operations Ledger', 14, 17);
+    doc.text(`Report Period: ${label} (${start} to ${end}) | Generated: ${new Date().toLocaleString()}`, 14, 23);
+
+    doc.setFont('times', 'bold');
+    doc.setTextColor(255, 255, 255);
+    doc.text(`VEHICLE: ${reportVehicleFilter} | PAYMENT: ${reportPaymentFilter}`, pageWidth - 14, 23, { align: 'right' });
+
+    // 2. Executive Financial Summary Cards Row
+    let startY = 33;
+    const cardWidth = (pageWidth - 28 - 20) / 5;
+    const cardHeight = 16;
+
+    const metrics = [
+      { title: 'Gross Rental Turnover', val: `Rs. ${data.grossRentalRevenue.toLocaleString()}`, sub: `Adv: Rs. ${data.advanceCashCollected.toLocaleString()}` },
+      { title: 'Customer Dues Left', val: `Rs. ${data.accountsReceivableDue.toLocaleString()}`, sub: `Recovery: ${data.collectionRate}%` },
+      { title: 'Investor Liabilities', val: `Rs. ${data.totalInvestorPayoutLiability.toLocaleString()}`, sub: `Payable: Rs. ${data.investorBalancePayable.toLocaleString()}` },
+      { title: 'Workshop Expenses', val: `Rs. ${data.totalMaintenanceExpenses.toLocaleString()}`, sub: `${data.maints.length} Service Logs` },
+      { title: 'Net Operating Profit', val: `Rs. ${data.netOperatingProfit.toLocaleString()}`, sub: `Margin: ${data.profitMargin}%` }
+    ];
+
+    metrics.forEach((m, i) => {
+      const x = 14 + i * (cardWidth + 5);
+      doc.setFillColor(250, 249, 245);
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(x, startY, cardWidth, cardHeight, 2, 2, 'FD');
+
+      doc.setFont('times', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(m.title.toUpperCase(), x + 3, startY + 4.5);
+
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text(m.val, x + 3, startY + 10);
+
+      doc.setFont('times', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(71, 85, 105);
+      doc.text(m.sub, x + 3, startY + 14);
+    });
+
+    startY += 21;
+
+    // 3. Table 1: Customer Rental Bookings & Revenue Ledger
+    doc.setFont('times', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text('1. Customer Rental Bookings & Revenue Ledger', 14, startY);
+
+    const rentalHeaders = [['#', 'Customer Name', 'CNIC', 'Guarantor', 'Vehicle & Plate', 'Rental Dates', 'Days', 'Distance / Extra', 'Total Rent', 'Advance', 'Balance', 'Status']];
+    const rentalRows = data.rentals.map((r, i) => [
+      i + 1,
+      r.customerName,
+      r.customerCnic,
+      r.guarantorName || '—',
+      `${r.carNameModel} [${r.carPlateNumber}]`,
+      `${r.startDate} to ${r.endDate}`,
+      r.totalDays,
+      r.isReturned ? `${(r.totalKmDriven || 0).toLocaleString()} KM (+Rs. ${(r.extraKmCharges || 0).toLocaleString()})` : `Start: ${r.startOdometer || 0} KM`,
+      `Rs. ${(r.totalPrice || 0).toLocaleString()}`,
+      `Rs. ${(r.advancePaid || 0).toLocaleString()}`,
+      `Rs. ${(r.balanceDue || 0).toLocaleString()}`,
+      r.paymentStatus === 'PAID_FULL' ? 'PAID FULL' : 'PENDING'
+    ]);
+
+    if (data.rentals.length > 0) {
+      rentalRows.push([
+        '',
+        'SUBTOTAL',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        `Rs. ${data.grossRentalRevenue.toLocaleString()}`,
+        `Rs. ${data.advanceCashCollected.toLocaleString()}`,
+        `Rs. ${data.accountsReceivableDue.toLocaleString()}`,
+        `${data.collectionRate}% Recv`
+      ]);
+    }
+
+    autoTable(doc, {
+      startY: startY + 2,
+      head: rentalHeaders,
+      body: rentalRows,
+      theme: 'grid',
+      headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', fontSize: 7.5, halign: 'left' },
+      bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: 14, right: 14 },
+      columnStyles: {
+        0: { cellWidth: 8, halign: 'center' },
+        6: { cellWidth: 10, halign: 'center' },
+        8: { halign: 'right', fontStyle: 'bold' },
+        9: { halign: 'right' },
+        10: { halign: 'right' },
+        11: { cellWidth: 18, halign: 'center' }
+      },
+      didParseCell: (hookData) => {
+        if (hookData.row.index === rentalRows.length - 1 && data.rentals.length > 0) {
+          hookData.cell.styles.fontStyle = 'bold';
+          hookData.cell.styles.fillColor = [241, 245, 249];
+        }
+      }
+    });
+
+    let currentY = (doc as any).lastAutoTable.finalY + 8;
+
+    // 4. Table 2: Investor Fleet Settlement & Payout Obligations
+    if (currentY > pageHeight - 40) {
+      doc.addPage();
+      currentY = 16;
+    }
+
+    doc.setFont('times', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text('2. Investor Fleet Settlement & Payout Obligations', 14, currentY);
+
+    const invHeaders = [['#', 'Investor Name', 'CNIC', 'Contact', 'Vehicle Deposited', 'Contract Dates', 'Days', 'Agreed Payout', 'Advance Given', 'Balance Payable', 'Status']];
+    const invRows = data.investorRows.map((item, i) => [
+      i + 1,
+      item.investorName,
+      item.investorCnic,
+      item.investorPhone || '—',
+      `${item.vehicle.carNameModel} [${item.vehicle.carPlateNumber}]`,
+      `${item.vehicle.startDate} to ${item.vehicle.endDate}`,
+      item.vehicle.totalDays,
+      `Rs. ${(item.vehicle.payoutAmount || 0).toLocaleString()}`,
+      `Rs. ${(item.vehicle.advancePaid || 0).toLocaleString()}`,
+      `Rs. ${(item.vehicle.balanceDue || 0).toLocaleString()}`,
+      item.vehicle.paymentStatus === 'PAID_FULL' ? 'PAID FULL' : 'PENDING'
+    ]);
+
+    if (data.investorRows.length > 0) {
+      invRows.push([
+        '',
+        'SUBTOTAL',
+        '',
+        '',
+        '',
+        '',
+        '',
+        `Rs. ${data.totalInvestorPayoutLiability.toLocaleString()}`,
+        `Rs. ${data.investorAdvancePaid.toLocaleString()}`,
+        `Rs. ${data.investorBalancePayable.toLocaleString()}`,
+        'Verified'
+      ]);
+    }
+
+    autoTable(doc, {
+      startY: currentY + 2,
+      head: invHeaders,
+      body: invRows,
+      theme: 'grid',
+      headStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
+      bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: 14, right: 14 },
+      columnStyles: {
+        0: { cellWidth: 8, halign: 'center' },
+        6: { cellWidth: 10, halign: 'center' },
+        7: { halign: 'right', fontStyle: 'bold' },
+        8: { halign: 'right' },
+        9: { halign: 'right' },
+        10: { cellWidth: 18, halign: 'center' }
+      },
+      didParseCell: (hookData) => {
+        if (hookData.row.index === invRows.length - 1 && data.investorRows.length > 0) {
+          hookData.cell.styles.fontStyle = 'bold';
+          hookData.cell.styles.fillColor = [241, 245, 249];
+        }
+      }
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+
+    // 5. Table 3: Vehicle Maintenance & Workshop Expenses
+    if (currentY > pageHeight - 40) {
+      doc.addPage();
+      currentY = 16;
+    }
+
+    doc.setFont('times', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text('3. Vehicle Maintenance & Workshop Expenses', 14, currentY);
+
+    const maintHeaders = [['#', 'Date', 'Vehicle & Plate', 'Service Category', 'Workshop / Vendor', 'Odometer', 'Cost Incurred', 'Description / Notes']];
+    const maintRows = data.maints.map((m, i) => [
+      i + 1,
+      m.serviceDate,
+      `${m.carNameModel} [${m.carPlateNumber}]`,
+      m.serviceType === 'Other' ? (m.customServiceType || 'Other') : m.serviceType,
+      m.vendorName || '—',
+      m.odometer ? `${m.odometer.toLocaleString()} KM` : '—',
+      `Rs. ${(m.cost || 0).toLocaleString()}`,
+      m.description || '—'
+    ]);
+
+    if (data.maints.length > 0) {
+      maintRows.push([
+        '',
+        'SUBTOTAL',
+        '',
+        '',
+        '',
+        '',
+        `Rs. ${data.totalMaintenanceExpenses.toLocaleString()}`,
+        'Verified'
+      ]);
+    }
+
+    autoTable(doc, {
+      startY: currentY + 2,
+      head: maintHeaders,
+      body: maintRows,
+      theme: 'grid',
+      headStyles: { fillColor: [51, 65, 85], textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
+      bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: 14, right: 14 },
+      columnStyles: {
+        0: { cellWidth: 8, halign: 'center' },
+        6: { halign: 'right', fontStyle: 'bold' }
+      },
+      didParseCell: (hookData) => {
+        if (hookData.row.index === maintRows.length - 1 && data.maints.length > 0) {
+          hookData.cell.styles.fontStyle = 'bold';
+          hookData.cell.styles.fillColor = [241, 245, 249];
+        }
+      }
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+
+    // 6. Table 4: Vehicle Profitability & ROI Matrix
+    if (currentY > pageHeight - 40) {
+      doc.addPage();
+      currentY = 16;
+    }
+
+    doc.setFont('times', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text('4. Vehicle-by-Vehicle Profitability & ROI Matrix', 14, currentY);
+
+    const roiHeaders = [['#', 'Vehicle Model & Plate', 'Total Bookings', 'Rental Inflow', 'Investor Outflow', 'Maintenance Cost', 'Net Profit Margin', 'Margin %']];
+    const roiRows = data.vehicleMatrix.map((vm, i) => {
+      const marginPct = vm.rentalRevenue > 0 ? ((vm.netMargin / vm.rentalRevenue) * 100).toFixed(1) : '0.0';
+      return [
+        i + 1,
+        `${vm.model} [${vm.plate}]`,
+        vm.rentalCount,
+        `Rs. ${vm.rentalRevenue.toLocaleString()}`,
+        `Rs. ${vm.investorPayout.toLocaleString()}`,
+        `Rs. ${vm.maintenanceCost.toLocaleString()}`,
+        `Rs. ${vm.netMargin.toLocaleString()}`,
+        `${marginPct}%`
+      ];
+    });
+
+    if (data.vehicleMatrix.length > 0) {
+      roiRows.push([
+        '',
+        'TOTAL FLEET PERFORMANCE',
+        data.rentals.length,
+        `Rs. ${data.grossRentalRevenue.toLocaleString()}`,
+        `Rs. ${data.totalInvestorPayoutLiability.toLocaleString()}`,
+        `Rs. ${data.totalMaintenanceExpenses.toLocaleString()}`,
+        `Rs. ${data.netOperatingProfit.toLocaleString()}`,
+        `${data.profitMargin}%`
+      ]);
+    }
+
+    autoTable(doc, {
+      startY: currentY + 2,
+      head: roiHeaders,
+      body: roiRows,
+      theme: 'grid',
+      headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', fontSize: 7.5 },
+      bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: 14, right: 14 },
+      columnStyles: {
+        0: { cellWidth: 8, halign: 'center' },
+        2: { cellWidth: 20, halign: 'center' },
+        3: { halign: 'right' },
+        4: { halign: 'right' },
+        5: { halign: 'right' },
+        6: { halign: 'right', fontStyle: 'bold' },
+        7: { cellWidth: 18, halign: 'center', fontStyle: 'bold' }
+      },
+      didParseCell: (hookData) => {
+        if (hookData.row.index === roiRows.length - 1 && data.vehicleMatrix.length > 0) {
+          hookData.cell.styles.fontStyle = 'bold';
+          hookData.cell.styles.fillColor = [241, 245, 249];
+        }
+      }
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 12;
+
+    // 7. Official Signatures Block
+    if (currentY > pageHeight - 30) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    const colW = (pageWidth - 28) / 3;
+    doc.setDrawColor(148, 163, 184);
+    doc.setLineWidth(0.3);
+
+    doc.line(14, currentY, 14 + colW - 10, currentY);
+    doc.line(14 + colW + 5, currentY, 14 + 2 * colW - 5, currentY);
+    doc.line(14 + 2 * colW + 10, currentY, pageWidth - 14, currentY);
+
+    doc.setFont('times', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(51, 65, 85);
+    doc.text('Prepared By (Accounting)', 14 + (colW - 10) / 2, currentY + 4, { align: 'center' });
+    doc.text('Audited By (Finance Manager)', 14 + colW + (colW - 10) / 2, currentY + 4, { align: 'center' });
+    doc.text('Authorized Directorate (Al-Falah)', 14 + 2 * colW + (colW - 10) / 2, currentY + 4, { align: 'center' });
+
+    // Page Numbers on all pages
+    const totalPages = (doc.internal as any).getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFont('times', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text(`Page ${i} of ${totalPages} - Al-Falah Executive Financial Statement`, pageWidth / 2, pageHeight - 6, { align: 'center' });
+    }
+
+    doc.save(`Al-Falah-Financial-Statement-${start}-to-${end}.pdf`);
+    showNotification('Official Financial Statement PDF downloaded successfully!', 'success');
+  };
+
+  const handleDownloadFinancialExcel = () => {
+    const { start, end, label } = reportDateRange;
+    const data = reportFinancialData;
+
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: Executive Summary
+    const summaryData = [
+      ['AL-FALAH RENT A CAR - EXECUTIVE FINANCIAL STATEMENT'],
+      ['Generated On', new Date().toLocaleString()],
+      ['Report Time Lapse', label],
+      ['Date Range', `${start} to ${end}`],
+      ['Vehicle Filter', reportVehicleFilter],
+      ['Payment Filter', reportPaymentFilter],
+      [],
+      ['EXECUTIVE FINANCIAL METRICS', 'AMOUNT (PKR)'],
+      ['Gross Rental Turnover (Revenue Billed)', data.grossRentalRevenue],
+      ['Advance Cash Collected', data.advanceCashCollected],
+      ['Outstanding Customer Receivables (Balance Due)', data.accountsReceivableDue],
+      ['Extra KM Surcharges Incurred', data.totalExtraKmCharges],
+      ['Total Investor Fleet Liabilities', data.totalInvestorPayoutLiability],
+      ['Investor Advance Disbursed', data.investorAdvancePaid],
+      ['Investor Balance Payable', data.investorBalancePayable],
+      ['Total Workshop Maintenance Costs', data.totalMaintenanceExpenses],
+      ['Net Operating Profit (EBITDA)', data.netOperatingProfit],
+      ['Net Profit Margin (%)', `${data.profitMargin}%`],
+      ['Customer Dues Collection Rate (%)', `${data.collectionRate}%`],
+      ['Total Active Rentals Count', data.rentals.length],
+      ['Total Fleet Vehicles Count', data.vehicleMatrix.length]
+    ];
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+    wsSummary['!cols'] = [{ wch: 45 }, { wch: 25 }];
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Executive Summary');
+
+    // Sheet 2: Customer Rentals
+    const rentalHeaders = [
+      'SR #', 'Customer Name', 'CNIC Number', 'Contact Phone', 'Guarantor Name', 'Guarantor Father Name', 'Guarantor CNIC', 'Vehicle Model', 'Plate Number', 'Start Date', 'End Date', 'Rental Days', 'Start KM', 'Return KM', 'Total KM Driven', 'Extra KM Surcharge (PKR)', 'Total Rental Price (PKR)', 'Advance Paid (PKR)', 'Balance Due (PKR)', 'Vehicle Return Status', 'Payment Status'
+    ];
+    const rentalRows: any[] = data.rentals.map((r, i) => [
+      i + 1,
+      r.customerName,
+      r.customerCnic,
+      r.customerPhone || '',
+      r.guarantorName || '',
+      r.guarantorFatherName || '',
+      r.guarantorCnic || '',
+      r.carNameModel,
+      r.carPlateNumber,
+      r.startDate,
+      r.endDate,
+      r.totalDays,
+      r.startOdometer || 0,
+      r.endOdometer || 0,
+      r.totalKmDriven || 0,
+      r.extraKmCharges || 0,
+      r.totalPrice || 0,
+      r.advancePaid || 0,
+      r.balanceDue || 0,
+      r.isReturned ? 'RETURNED' : 'ON RENT',
+      r.paymentStatus || 'PENDING'
+    ]);
+    if (data.rentals.length > 0) {
+      rentalRows.push([
+        'TOTAL', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+        data.totalExtraKmCharges,
+        data.grossRentalRevenue,
+        data.advanceCashCollected,
+        data.accountsReceivableDue,
+        '',
+        `${data.collectionRate}% Collected`
+      ]);
+    }
+    const wsRentals = XLSX.utils.aoa_to_sheet([rentalHeaders, ...rentalRows]);
+    wsRentals['!cols'] = [
+      { wch: 6 }, { wch: 20 }, { wch: 18 }, { wch: 15 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 15 }
+    ];
+    XLSX.utils.book_append_sheet(wb, wsRentals, 'Customer Rentals');
+
+    // Sheet 3: Investor Payouts
+    const invHeaders = [
+      'SR #', 'Investor Name', 'CNIC Number', 'Contact Phone', 'Vehicle Model', 'Plate Number', 'Start Date', 'End Date', 'Contract Days', 'Agreed Payout (PKR)', 'Advance Given (PKR)', 'Balance Payable (PKR)', 'Payment Status'
+    ];
+    const invRows: any[] = data.investorRows.map((item, i) => [
+      i + 1,
+      item.investorName,
+      item.investorCnic,
+      item.investorPhone || '',
+      item.vehicle.carNameModel,
+      item.vehicle.carPlateNumber,
+      item.vehicle.startDate,
+      item.vehicle.endDate,
+      item.vehicle.totalDays,
+      item.vehicle.payoutAmount || 0,
+      item.vehicle.advancePaid || 0,
+      item.vehicle.balanceDue || 0,
+      item.vehicle.paymentStatus || 'PENDING'
+    ]);
+    if (data.investorRows.length > 0) {
+      invRows.push([
+        'TOTAL', '', '', '', '', '', '', '', '',
+        data.totalInvestorPayoutLiability,
+        data.investorAdvancePaid,
+        data.investorBalancePayable,
+        'Verified'
+      ]);
+    }
+    const wsInv = XLSX.utils.aoa_to_sheet([invHeaders, ...invRows]);
+    wsInv['!cols'] = [
+      { wch: 6 }, { wch: 20 }, { wch: 18 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 15 }
+    ];
+    XLSX.utils.book_append_sheet(wb, wsInv, 'Investor Liabilities');
+
+    // Sheet 4: Maintenance Expenses
+    const maintHeaders = [
+      'SR #', 'Service Date', 'Vehicle Model', 'Plate Number', 'Service Category', 'Workshop / Vendor', 'Odometer Reading (KM)', 'Cost Incurred (PKR)', 'Work Details / Notes'
+    ];
+    const maintRows: any[] = data.maints.map((m, i) => [
+      i + 1,
+      m.serviceDate,
+      m.carNameModel,
+      m.carPlateNumber,
+      m.serviceType === 'Other' ? (m.customServiceType || 'Other') : m.serviceType,
+      m.vendorName || '',
+      m.odometer || 0,
+      m.cost || 0,
+      m.description || ''
+    ]);
+    if (data.maints.length > 0) {
+      maintRows.push([
+        'TOTAL', '', '', '', '', '', '',
+        data.totalMaintenanceExpenses,
+        'Verified'
+      ]);
+    }
+    const wsMaint = XLSX.utils.aoa_to_sheet([maintHeaders, ...maintRows]);
+    wsMaint['!cols'] = [
+      { wch: 6 }, { wch: 14 }, { wch: 20 }, { wch: 15 }, { wch: 24 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 35 }
+    ];
+    XLSX.utils.book_append_sheet(wb, wsMaint, 'Workshop Expenses');
+
+    // Sheet 5: Vehicle ROI Matrix
+    const roiHeaders = [
+      'SR #', 'Vehicle Model', 'Plate Number', 'Total Bookings', 'Rental Inflow (PKR)', 'Investor Outflow (PKR)', 'Maintenance Cost (PKR)', 'Net Profit Margin (PKR)', 'Profit Margin %'
+    ];
+    const roiRows: any[] = data.vehicleMatrix.map((vm, i) => {
+      const marginPct = vm.rentalRevenue > 0 ? ((vm.netMargin / vm.rentalRevenue) * 100).toFixed(1) : '0.0';
+      return [
+        i + 1,
+        vm.model,
+        vm.plate,
+        vm.rentalCount,
+        vm.rentalRevenue,
+        vm.investorPayout,
+        vm.maintenanceCost,
+        vm.netMargin,
+        `${marginPct}%`
+      ];
+    });
+    if (data.vehicleMatrix.length > 0) {
+      roiRows.push([
+        'TOTAL', 'FLEET PERFORMANCE', '',
+        data.rentals.length,
+        data.grossRentalRevenue,
+        data.totalInvestorPayoutLiability,
+        data.totalMaintenanceExpenses,
+        data.netOperatingProfit,
+        `${data.profitMargin}%`
+      ]);
+    }
+    const wsRoi = XLSX.utils.aoa_to_sheet([roiHeaders, ...roiRows]);
+    wsRoi['!cols'] = [
+      { wch: 6 }, { wch: 22 }, { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 15 }
+    ];
+    XLSX.utils.book_append_sheet(wb, wsRoi, 'Vehicle ROI Matrix');
+
+    // Save Workbook as .xlsx
+    XLSX.writeFile(wb, `Al-Falah-Financial-Statement-${start}-to-${end}.xlsx`);
+    showNotification('Official Multi-Sheet Excel Workbook (.xlsx) downloaded successfully!', 'success');
+  };
 
   const handleDownloadFinancialCsv = () => {
     const { start, end, label } = reportDateRange;
@@ -4206,19 +4754,27 @@ export function App() {
                 {/* Export & Action Buttons */}
                 <div className="flex flex-wrap items-center gap-2 self-start lg:self-center no-print">
                   <button
-                    onClick={() => window.print()}
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-950 text-white font-bold text-xs rounded-lg transition shadow-xs flex items-center gap-1.5"
-                    title="Print or Save formal PDF report"
+                    onClick={handleDownloadFinancialPdf}
+                    className="px-4 py-2 bg-indigo-950 hover:bg-black text-white font-bold text-xs rounded-lg transition shadow-md flex items-center gap-1.5 border border-indigo-800"
+                    title="Download Official Financial Statement as High-Quality PDF"
                   >
-                    Print / Export PDF
+                    Download PDF Statement
                   </button>
 
                   <button
-                    onClick={handleDownloadFinancialCsv}
-                    className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded-lg transition shadow-xs flex items-center gap-1.5"
-                    title="Export complete financial ledger to Excel / CSV"
+                    onClick={handleDownloadFinancialExcel}
+                    className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded-lg transition shadow-md flex items-center gap-1.5 border border-emerald-700"
+                    title="Download Multi-Sheet Microsoft Excel Spreadsheet (.xlsx)"
                   >
-                    Download CSV Spreadsheet
+                    Download Excel Workbook (.xlsx)
+                  </button>
+
+                  <button
+                    onClick={() => window.print()}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 font-bold text-xs rounded-lg transition flex items-center gap-1.5"
+                    title="Print or view print layout"
+                  >
+                    Print Layout
                   </button>
                 </div>
               </div>

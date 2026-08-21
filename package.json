@@ -3,7 +3,6 @@
   "private": true,
   "version": "1.0.0",
   "description": "Al-Falah Rent A Car Enterprise Fleet, Rentals & Financial Ledger Portal",
-
   "scripts": {
     "dev": "vite",
     "dev:server": "node -r dotenv/config api/index.js",
@@ -21,7 +20,8 @@
     "lucide-react": "^0.475.0",
     "mongoose": "^9.9.3",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",
