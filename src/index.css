@@ -58,10 +58,10 @@
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
-  opacity: 0.94;
+  opacity: 1;
   pointer-events: none;
   z-index: 0;
-  filter: contrast(105%) brightness(125%) saturate(108%);
+  filter: contrast(106%) brightness(106%);
 }
 
 .luxury-bg-overlay {
@@ -70,7 +70,7 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: radial-gradient(ellipse at center, rgba(15, 23, 42, 0.06) 0%, rgba(15, 23, 42, 0.38) 100%);
+  background: linear-gradient(180deg, rgba(6, 11, 25, 0.70) 0%, rgba(6, 11, 25, 0.30) 45%, rgba(6, 11, 25, 0.65) 100%);
   pointer-events: none;
   z-index: 0;
 }
