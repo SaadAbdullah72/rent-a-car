@@ -1128,36 +1128,47 @@ export function App() {
 
         {/* VIEW MODE 1: EXECUTIVE LANDING PAGE - NO WHITE CARDS, DIRECT ON 8K BG IMAGE */}
         {viewMode === 'landing' && (
-          <div className="min-h-[80vh] flex flex-col items-center justify-center text-center space-y-6 animate-fade-in font-serif px-4 py-12">
+          <div className="min-h-[85vh] flex flex-col items-center justify-center text-center space-y-7 animate-fade-scale font-serif px-4 py-16">
             
-            {/* Crystal Clear 3D Brand App Icon */}
-            <div className="relative group">
-              <div className="absolute -inset-1 bg-gradient-to-r from-amber-500/30 to-amber-200/30 rounded-3xl blur-lg opacity-70 group-hover:opacity-100 transition duration-500"></div>
-              <img
-                src="/app-icon.png"
-                alt="Al-Falah Luxury App Icon"
-                className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl shadow-2xl border border-amber-400/40 object-cover transform transition duration-300 hover:scale-105"
-              />
+            {/* Elegant Pill Category */}
+            <div className="inline-flex items-center gap-2 px-5 py-1.5 rounded-full bg-slate-950/60 border border-slate-700/60 backdrop-blur-md shadow-lg">
+              <span className="text-[11px] uppercase tracking-[0.25em] text-slate-200 font-semibold font-serif">
+                Enterprise Fleet & Financial Management
+              </span>
             </div>
 
-            <div className="space-y-4 max-w-3xl font-serif">
-              <div className="text-xs uppercase tracking-widest text-slate-300 font-bold font-serif bg-slate-950/60 px-4 py-1.5 rounded-full inline-block border border-slate-700/60 backdrop-blur-md">
-                Al-Falah Rent A Car Portal
-              </div>
-              
-              <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white tracking-tight leading-tight font-serif drop-shadow-2xl">
-                Al-Falah Rent A Car Software
+            {/* Main Luxury Title */}
+            <div className="space-y-4 max-w-3xl">
+              <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold text-white tracking-tight leading-tight font-serif drop-shadow-2xl">
+                Al-Falah Rent A Car
               </h1>
               
-              <p className="text-base sm:text-lg text-slate-200 font-serif leading-relaxed max-w-2xl mx-auto drop-shadow-lg font-medium">
-                Enterprise Fleet Intake, Customer Bookings, Maintenance Logs & Complete Financial Ledger Accounting
+              <p className="text-sm sm:text-base md:text-lg text-slate-200 font-serif leading-relaxed max-w-2xl mx-auto drop-shadow-lg font-medium">
+                Comprehensive Fleet Intake, Customer Rentals, Maintenance Registry & Financial Ledger Accounting
               </p>
             </div>
 
-            <div className="pt-2 font-serif">
+            {/* Formal Text Feature Highlights (No emojis / No icons) */}
+            <div className="flex flex-wrap items-center justify-center gap-2.5 max-w-2xl pt-2">
+              <span className="px-3.5 py-1 rounded-md bg-slate-950/50 border border-slate-700/50 text-slate-200 text-xs font-serif backdrop-blur-sm shadow-sm">
+                Multi-Vehicle Fleet Intake
+              </span>
+              <span className="px-3.5 py-1 rounded-md bg-slate-950/50 border border-slate-700/50 text-slate-200 text-xs font-serif backdrop-blur-sm shadow-sm">
+                Customer Rental Agreements
+              </span>
+              <span className="px-3.5 py-1 rounded-md bg-slate-950/50 border border-slate-700/50 text-slate-200 text-xs font-serif backdrop-blur-sm shadow-sm">
+                Active Profit & Loss Ledger
+              </span>
+              <span className="px-3.5 py-1 rounded-md bg-slate-950/50 border border-slate-700/50 text-slate-200 text-xs font-serif backdrop-blur-sm shadow-sm">
+                Cloud Database Synchronization
+              </span>
+            </div>
+
+            {/* Formal Executive Action Button */}
+            <div className="pt-4">
               <button
                 onClick={() => setShowLoginModal(true)}
-                className="btn-executive px-10 py-4 bg-slate-900/90 text-white border border-slate-700 font-bold text-base rounded-xl hover:bg-slate-900 transition duration-200 font-serif shadow-2xl backdrop-blur-md"
+                className="px-10 py-3.5 bg-slate-900/90 hover:bg-slate-900 text-white border border-slate-600 hover:border-slate-400 font-bold text-sm rounded-xl transition duration-300 font-serif shadow-2xl backdrop-blur-md transform hover:scale-[1.02] active:scale-[0.99]"
               >
                 Access System Management Portal
               </button>
@@ -1222,7 +1233,6 @@ export function App() {
                   />
                 </div>
 
-
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 font-serif">
                   <button
                     type="button"
@@ -1250,23 +1260,16 @@ export function App() {
             {/* Top Header Banner */}
             <header className="glass-panel p-6 rounded-xl font-serif">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 font-serif">
-                <div className="flex items-center gap-4">
-                  <img
-                    src="/app-icon.png"
-                    alt="Al-Falah App Icon"
-                    className="w-14 h-14 rounded-xl shadow-md border border-amber-400/30 object-cover shrink-0"
-                  />
-                  <div>
-                    <div className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-0.5 font-serif">
-                      Al-Falah Rent A Car System
-                    </div>
-                    <h1 className="text-2xl font-bold text-slate-900 font-serif">
-                      Al-Falah Rent A Car - Enterprise Fleet, Rentals & Financial Ledger Portal
-                    </h1>
-                    <p className="text-xs text-slate-600 mt-0.5 font-serif">
-                      Full Financial Accounting, Multi-Vehicle Intake, Customer Rentals, Maintenance Logs & 360° History
-                    </p>
+                <div>
+                  <div className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-1 font-serif">
+                    Al-Falah Rent A Car System
                   </div>
+                  <h1 className="text-2xl font-bold text-slate-900 font-serif">
+                    Al-Falah Rent A Car - Enterprise Fleet, Rentals & Financial Ledger Portal
+                  </h1>
+                  <p className="text-xs text-slate-600 mt-1 font-serif">
+                    Full Financial Accounting, Multi-Vehicle Intake, Customer Rentals, Maintenance Logs & 360° History
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 self-start md:self-center font-serif">

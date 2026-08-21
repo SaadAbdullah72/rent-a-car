@@ -58,10 +58,10 @@
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
-  opacity: 0.78;
+  opacity: 0.94;
   pointer-events: none;
   z-index: 0;
-  filter: contrast(110%) brightness(100%);
+  filter: contrast(105%) brightness(125%) saturate(108%);
 }
 
 .luxury-bg-overlay {
@@ -70,17 +70,16 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: radial-gradient(ellipse at center, rgba(15, 23, 42, 0.25) 0%, rgba(15, 23, 42, 0.70) 100%);
+  background: radial-gradient(ellipse at center, rgba(15, 23, 42, 0.06) 0%, rgba(15, 23, 42, 0.38) 100%);
   pointer-events: none;
   z-index: 0;
 }
-
 
 /* Smooth Fade In Animation */
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -88,8 +87,23 @@
   }
 }
 
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 .animate-fade-in {
-  animation: fadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-scale {
+  animation: fadeInScale 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* Glassmorphism Panel Cards */
