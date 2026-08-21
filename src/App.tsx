@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { InvestorRecord, VehicleItem, CustomerRentalRecord, VehicleMaintenanceLog, ActiveTab, VehicleOilStatus, OilServiceHealthStatus } from './types';
+import { InvestorRecord, VehicleItem, CustomerRentalRecord, VehicleMaintenanceLog, ActiveTab } from './types';
 import { StorageService, defaultSeedInvestors, defaultSeedCustomerRentals, defaultSeedMaintenance } from './services/storage';
 
 const SERVICE_OPTIONS = [
@@ -165,6 +165,18 @@ export function App() {
   // --- AGENDA FILTER TIME FRAME ---
   const [agendaTimeframe, setAgendaTimeframe] = useState<'today' | '2days' | '5days' | 'week' | 'all'>('today');
 
+  // --- FINANCIAL REPORT GENERATOR STATE ---
+  const [reportPreset, setReportPreset] = useState<'this-week' | 'this-month' | 'this-quarter' | 'this-year' | 'all-time' | 'custom'>('this-month');
+  const [reportCustomStart, setReportCustomStart] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().split('T')[0];
+  });
+  const [reportCustomEnd, setReportCustomEnd] = useState<string>(todayIso);
+  const [reportVehicleFilter, setReportVehicleFilter] = useState<string>('ALL');
+  const [reportPaymentFilter, setReportPaymentFilter] = useState<string>('ALL');
+  const [reportActiveSection, setReportActiveSection] = useState<'all' | 'rentals' | 'investors' | 'maintenance' | 'roi'>('all');
+
   // --- EDIT MODAL STATE ---
   const [editingModal, setEditingModal] = useState<{
     type: 'investor' | 'customer' | 'maintenance';
@@ -179,15 +191,6 @@ export function App() {
     details: { label: string; value: string }[];
   } | null>(null);
 
-  // --- 5,000 KM OIL CHANGE TRACKER STATE ---
-  const [oilTrackerFilter, setOilTrackerFilter] = useState<'ALL' | 'OVERDUE' | 'DUE_SOON' | 'HEALTHY'>('ALL');
-  const [oilTrackerSearch, setOilTrackerSearch] = useState<string>('');
-  const [oilServiceModalVehicle, setOilServiceModalVehicle] = useState<VehicleOilStatus | null>(null);
-  const [oilServiceDate, setOilServiceDate] = useState<string>(todayIso);
-  const [oilServiceOdometer, setOilServiceOdometer] = useState<string>('');
-  const [oilServiceCost, setOilServiceCost] = useState<string>('12000');
-  const [oilServiceVendor, setOilServiceVendor] = useState<string>('');
-  const [oilServiceNotes, setOilServiceNotes] = useState<string>('');
 
   // --- SAVING STATE (button spinner) ---
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -956,55 +959,6 @@ export function App() {
     }
   };
 
-  // --- 5,000 KM OIL SERVICE MODAL HANDLERS ---
-  const openQuickOilServiceModal = (item: VehicleOilStatus) => {
-    setOilServiceModalVehicle(item);
-    setOilServiceDate(todayIso);
-    setOilServiceOdometer(String(item.currentOdometer || 0));
-    setOilServiceCost('12000');
-    setOilServiceVendor('');
-    setOilServiceNotes('Mobil 1 5W-30 Synthetic engine oil & OEM filter replaced.');
-  };
-
-  const handleQuickRecordOilService = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!oilServiceModalVehicle) return;
-
-    const odoNum = parseFloat(oilServiceOdometer) || oilServiceModalVehicle.currentOdometer;
-    const costNum = parseFloat(oilServiceCost) || 0;
-
-    const newMaintLog: VehicleMaintenanceLog = {
-      carPlateNumber: oilServiceModalVehicle.plate,
-      carNameModel: oilServiceModalVehicle.model,
-      serviceType: 'Oil & Filters Change',
-      customServiceType: '',
-      serviceDate: oilServiceDate || todayIso,
-      cost: costNum,
-      vendorName: oilServiceVendor || 'Authorized Service Workshop',
-      odometer: odoNum,
-      description: oilServiceNotes || 'Routine 5,000 KM engine oil and filter service completed.'
-    };
-
-    setIsSaving(true);
-    try {
-      const result = await StorageService.saveMaintenanceToMongo(newMaintLog);
-      if (result.success) {
-        showNotification(
-          `Oil Service Recorded for ${oilServiceModalVehicle.model} [${oilServiceModalVehicle.plate}] at ${odoNum.toLocaleString()} KM! Next service due at ${(odoNum + 5000).toLocaleString()} KM.`,
-          'success'
-        );
-        setOilServiceModalVehicle(null);
-        await refreshAllData();
-      } else {
-        showNotification(`Database Error: Could not log oil service. ${result.error || ''}`, 'error');
-      }
-    } catch (err: any) {
-      showNotification(`Server Error: ${err.message || ''}`, 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   // --- EDIT MODAL SAVE HANDLER ---
   const handleSaveEditModal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1322,115 +1276,255 @@ export function App() {
     return filteredMaintenanceLogs.reduce((sum, m) => sum + (m.cost || 0), 0);
   }, [filteredMaintenanceLogs]);
 
-  // --- 5,000 KM FLEET OIL CHANGE LIFECYCLE MATRIX ---
-  const fleetOilMatrix = useMemo<VehicleOilStatus[]>(() => {
-    return allFleetVehicles.map(v => {
-      const plateUpper = v.plate.trim().toUpperCase();
+  // Unique Vehicle Plates for Global Filters
+  const allUniquePlates = useMemo(() => {
+    const set = new Set<string>();
+    investorRecords.forEach(inv => (inv.vehicles || []).forEach(v => v.carPlateNumber && set.add(v.carPlateNumber.trim().toUpperCase())));
+    customerRentals.forEach(r => r.carPlateNumber && set.add(r.carPlateNumber.trim().toUpperCase()));
+    maintenanceLogs.forEach(m => m.carPlateNumber && set.add(m.carPlateNumber.trim().toUpperCase()));
+    return Array.from(set).sort();
+  }, [investorRecords, customerRentals, maintenanceLogs]);
 
-      // Find Owner Investor if any
-      let invName = 'Direct Fleet';
-      let invCnic = '—';
-      for (const inv of investorRecords) {
-        if (inv.vehicles && inv.vehicles.some(iv => iv.carPlateNumber?.trim().toUpperCase() === plateUpper)) {
-          invName = inv.name;
-          invCnic = inv.cnic;
-          break;
+  // --- FINANCIAL REPORT DATA COMPUTATION ---
+  const reportDateRange = useMemo(() => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    if (reportPreset === 'this-week') {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      return { start: d.toISOString().split('T')[0], end: todayStr, label: 'Past 7 Days (Weekly)' };
+    }
+    if (reportPreset === 'this-month') {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      return { start: d.toISOString().split('T')[0], end: todayStr, label: 'Past 30 Days (Monthly)' };
+    }
+    if (reportPreset === 'this-quarter') {
+      const d = new Date();
+      d.setDate(d.getDate() - 90);
+      return { start: d.toISOString().split('T')[0], end: todayStr, label: 'Past 90 Days (Quarterly)' };
+    }
+    if (reportPreset === 'this-year') {
+      const yearStart = `${today.getFullYear()}-01-01`;
+      return { start: yearStart, end: todayStr, label: `Year ${today.getFullYear()} to Date` };
+    }
+    if (reportPreset === 'all-time') {
+      return { start: '2000-01-01', end: '2099-12-31', label: 'All-Time Consolidated Ledger' };
+    }
+    return {
+      start: reportCustomStart || '2000-01-01',
+      end: reportCustomEnd || todayStr,
+      label: `Custom Period: ${reportCustomStart || 'Start'} to ${reportCustomEnd || 'End'}`
+    };
+  }, [reportPreset, reportCustomStart, reportCustomEnd, todayIso]);
+
+  const reportFinancialData = useMemo(() => {
+    const { start, end } = reportDateRange;
+
+    // Filter Customer Rentals
+    const rentals = customerRentals.filter(r => {
+      const rStart = r.startDate || '';
+      const rEnd = r.endDate || rStart;
+      const overlaps = (rStart <= end && rEnd >= start) || (rStart >= start && rStart <= end);
+      const matchesVehicle = reportVehicleFilter === 'ALL' || r.carPlateNumber.trim().toUpperCase() === reportVehicleFilter;
+      const matchesPayment = reportPaymentFilter === 'ALL' || r.paymentStatus === reportPaymentFilter;
+      return overlaps && matchesVehicle && matchesPayment;
+    });
+
+    // Filter Investor Vehicle Obligations
+    const investorRows: { investorName: string; investorCnic: string; investorPhone?: string; vehicle: VehicleItem }[] = [];
+    investorRecords.forEach(inv => {
+      (inv.vehicles || []).forEach(v => {
+        const vStart = v.startDate || '';
+        const vEnd = v.endDate || vStart;
+        const overlaps = (vStart <= end && vEnd >= start) || (vStart >= start && vStart <= end);
+        const matchesVehicle = reportVehicleFilter === 'ALL' || v.carPlateNumber.trim().toUpperCase() === reportVehicleFilter;
+        if (overlaps && matchesVehicle) {
+          investorRows.push({
+            investorName: inv.name,
+            investorCnic: inv.cnic,
+            investorPhone: inv.phone,
+            vehicle: v
+          });
         }
-      }
-
-      // Find all customer rentals for this vehicle plate
-      const vehicleRentals = customerRentals.filter(
-        r => r.carPlateNumber?.trim().toUpperCase() === plateUpper
-      );
-
-      // Find all maintenance logs for this vehicle plate
-      const vehicleMaints = maintenanceLogs.filter(
-        m => m.carPlateNumber?.trim().toUpperCase() === plateUpper
-      );
-
-      // 1. Current Highest Odometer Reading across rentals & maintenance
-      let currentOdo = 0;
-      vehicleRentals.forEach(r => {
-        if (r.startOdometer && r.startOdometer > currentOdo) currentOdo = r.startOdometer;
-        if (r.endOdometer && r.endOdometer > currentOdo) currentOdo = r.endOdometer;
       });
-      vehicleMaints.forEach(m => {
-        if (m.odometer && m.odometer > currentOdo) currentOdo = m.odometer;
-      });
+    });
 
-      // 2. Find Latest Oil Service Record
-      const oilMaints = vehicleMaints
-        .filter(m => m.serviceType && m.serviceType.toLowerCase().includes('oil'))
-        .sort((a, b) => new Date(b.serviceDate || '').getTime() - new Date(a.serviceDate || '').getTime());
+    // Filter Maintenance Logs
+    const maints = maintenanceLogs.filter(m => {
+      const mDate = m.serviceDate || '';
+      const inRange = mDate >= start && mDate <= end;
+      const matchesVehicle = reportVehicleFilter === 'ALL' || m.carPlateNumber.trim().toUpperCase() === reportVehicleFilter;
+      return inRange && matchesVehicle;
+    });
 
-      const latestOilRecord = oilMaints[0];
-      const lastOilChangeOdometer = latestOilRecord?.odometer || 0;
-      const lastOilChangeDate = latestOilRecord?.serviceDate || 'Initial Setup';
+    // Aggregations
+    const grossRentalRevenue = rentals.reduce((sum, r) => sum + (r.totalPrice || 0), 0);
+    const advanceCashCollected = rentals.reduce((sum, r) => sum + (r.advancePaid || 0), 0);
+    const accountsReceivableDue = rentals.reduce((sum, r) => sum + (r.balanceDue || 0), 0);
+    const totalExtraKmCharges = rentals.reduce((sum, r) => sum + (r.extraKmCharges || 0), 0);
 
-      // 3. Compute Distance Driven Since Last Oil Change
-      let kmSinceLast = 0;
-      if (lastOilChangeOdometer > 0 && currentOdo >= lastOilChangeOdometer) {
-        kmSinceLast = currentOdo - lastOilChangeOdometer;
-      } else if (lastOilChangeOdometer === 0 && currentOdo > 0) {
-        kmSinceLast = currentOdo % 5000;
-      }
+    const totalInvestorPayoutLiability = investorRows.reduce((sum, item) => sum + (item.vehicle.payoutAmount || 0), 0);
+    const investorAdvancePaid = investorRows.reduce((sum, item) => sum + (item.vehicle.advancePaid || 0), 0);
+    const investorBalancePayable = investorRows.reduce((sum, item) => sum + (item.vehicle.balanceDue || 0), 0);
 
-      const intervalKm = 5000;
-      const nextDueOdometer = (lastOilChangeOdometer > 0 ? lastOilChangeOdometer : Math.floor(currentOdo / 5000) * 5000) + intervalKm;
-      const kmRemaining = Math.max(0, intervalKm - kmSinceLast);
-      const progressPercent = Math.min(100, Math.round((kmSinceLast / intervalKm) * 100));
+    const totalMaintenanceExpenses = maints.reduce((sum, m) => sum + (m.cost || 0), 0);
 
-      let status: OilServiceHealthStatus = 'HEALTHY';
-      if (kmSinceLast >= intervalKm) {
-        status = 'OVERDUE';
-      } else if (kmSinceLast >= 4500) {
-        status = 'DUE_SOON';
-      }
+    const netOperatingProfit = grossRentalRevenue - totalInvestorPayoutLiability - totalMaintenanceExpenses;
+    const profitMargin = grossRentalRevenue > 0 ? ((netOperatingProfit / grossRentalRevenue) * 100).toFixed(1) : '0.0';
+    const collectionRate = grossRentalRevenue > 0 ? (((grossRentalRevenue - accountsReceivableDue) / grossRentalRevenue) * 100).toFixed(1) : '100.0';
 
-      return {
-        plate: v.plate,
-        model: v.model,
-        investorName: invName,
-        investorCnic: invCnic,
-        currentOdometer: currentOdo,
-        lastOilChangeOdometer,
-        lastOilChangeDate,
-        kmSinceLastOilChange: kmSinceLast,
-        intervalKm,
-        nextDueOdometer,
-        kmRemaining,
-        progressPercent,
-        status
+    // Unique Vehicle Performance Matrix
+    const vehicleMap = new Map<string, {
+      plate: string;
+      model: string;
+      rentalCount: number;
+      rentalRevenue: number;
+      advanceReceived: number;
+      investorPayout: number;
+      maintenanceCost: number;
+      netMargin: number;
+    }>();
+
+    rentals.forEach(r => {
+      const plate = r.carPlateNumber.trim().toUpperCase() || 'UNKNOWN';
+      const existing = vehicleMap.get(plate) || {
+        plate,
+        model: r.carNameModel || 'Unknown Model',
+        rentalCount: 0,
+        rentalRevenue: 0,
+        advanceReceived: 0,
+        investorPayout: 0,
+        maintenanceCost: 0,
+        netMargin: 0
       };
+      existing.rentalCount += 1;
+      existing.rentalRevenue += (r.totalPrice || 0);
+      existing.advanceReceived += (r.advancePaid || 0);
+      vehicleMap.set(plate, existing);
     });
-  }, [allFleetVehicles, investorRecords, customerRentals, maintenanceLogs]);
 
-  // Filtered Oil Matrix by Status and Search Term
-  const filteredOilMatrix = useMemo(() => {
-    const q = oilTrackerSearch.toLowerCase().trim();
-    return fleetOilMatrix.filter(item => {
-      // Status Filter
-      if (oilTrackerFilter === 'OVERDUE' && item.status !== 'OVERDUE') return false;
-      if (oilTrackerFilter === 'DUE_SOON' && item.status !== 'DUE_SOON') return false;
-      if (oilTrackerFilter === 'HEALTHY' && item.status !== 'HEALTHY') return false;
-
-      // Search query
-      if (!q) return true;
-      return (
-        item.plate.toLowerCase().includes(q) ||
-        item.model.toLowerCase().includes(q) ||
-        item.investorName.toLowerCase().includes(q)
-      );
+    investorRows.forEach(item => {
+      const plate = item.vehicle.carPlateNumber.trim().toUpperCase() || 'UNKNOWN';
+      const existing = vehicleMap.get(plate) || {
+        plate,
+        model: item.vehicle.carNameModel || 'Unknown Model',
+        rentalCount: 0,
+        rentalRevenue: 0,
+        advanceReceived: 0,
+        investorPayout: 0,
+        maintenanceCost: 0,
+        netMargin: 0
+      };
+      existing.investorPayout += (item.vehicle.payoutAmount || 0);
+      vehicleMap.set(plate, existing);
     });
-  }, [fleetOilMatrix, oilTrackerFilter, oilTrackerSearch]);
 
-  const oilMatrixSummary = useMemo(() => {
-    const total = fleetOilMatrix.length;
-    const overdue = fleetOilMatrix.filter(i => i.status === 'OVERDUE').length;
-    const dueSoon = fleetOilMatrix.filter(i => i.status === 'DUE_SOON').length;
-    const healthy = fleetOilMatrix.filter(i => i.status === 'HEALTHY').length;
-    return { total, overdue, dueSoon, healthy };
-  }, [fleetOilMatrix]);
+    maints.forEach(m => {
+      const plate = m.carPlateNumber.trim().toUpperCase() || 'UNKNOWN';
+      const existing = vehicleMap.get(plate) || {
+        plate,
+        model: m.carNameModel || 'Unknown Model',
+        rentalCount: 0,
+        rentalRevenue: 0,
+        advanceReceived: 0,
+        investorPayout: 0,
+        maintenanceCost: 0,
+        netMargin: 0
+      };
+      existing.maintenanceCost += (m.cost || 0);
+      vehicleMap.set(plate, existing);
+    });
+
+    const vehicleMatrix = Array.from(vehicleMap.values()).map(v => ({
+      ...v,
+      netMargin: v.rentalRevenue - v.investorPayout - v.maintenanceCost
+    }));
+
+    return {
+      rentals,
+      investorRows,
+      maints,
+      grossRentalRevenue,
+      advanceCashCollected,
+      accountsReceivableDue,
+      totalExtraKmCharges,
+      totalInvestorPayoutLiability,
+      investorAdvancePaid,
+      investorBalancePayable,
+      totalMaintenanceExpenses,
+      netOperatingProfit,
+      profitMargin,
+      collectionRate,
+      vehicleMatrix
+    };
+  }, [customerRentals, investorRecords, maintenanceLogs, reportDateRange, reportVehicleFilter, reportPaymentFilter]);
+
+  const handleDownloadFinancialCsv = () => {
+    const { start, end, label } = reportDateRange;
+    const data = reportFinancialData;
+
+    let csvContent = `\uFEFF`;
+    csvContent += `AL-FALAH RENT A CAR - EXECUTIVE FINANCIAL STATEMENT\n`;
+    csvContent += `Generated On:,"${new Date().toLocaleString()}"\n`;
+    csvContent += `Report Time Lapse:,"${label}"\n`;
+    csvContent += `Date Range:,"${start} to ${end}"\n`;
+    csvContent += `Vehicle Filter:,"${reportVehicleFilter}"\n`;
+    csvContent += `Payment Filter:,"${reportPaymentFilter}"\n\n`;
+
+    csvContent += `EXECUTIVE FINANCIAL SUMMARY\n`;
+    csvContent += `Metric,Amount (PKR)\n`;
+    csvContent += `Gross Rental Turnover (Revenue Billed),${data.grossRentalRevenue}\n`;
+    csvContent += `Advance Cash Received,${data.advanceCashCollected}\n`;
+    csvContent += `Outstanding Customer Receivables (Balance Due),${data.accountsReceivableDue}\n`;
+    csvContent += `Extra KM Surcharges Incurred,${data.totalExtraKmCharges}\n`;
+    csvContent += `Total Investor Fleet Payout Obligations,${data.totalInvestorPayoutLiability}\n`;
+    csvContent += `Investor Advance Disbursed,${data.investorAdvancePaid}\n`;
+    csvContent += `Investor Balance Payable,${data.investorBalancePayable}\n`;
+    csvContent += `Total Vehicle Maintenance Expenses,${data.totalMaintenanceExpenses}\n`;
+    csvContent += `Net Operating Profit,${data.netOperatingProfit}\n`;
+    csvContent += `Net Operating Profit Margin (%),${data.profitMargin}%\n`;
+    csvContent += `Customer Collection Rate (%),${data.collectionRate}%\n\n`;
+
+    csvContent += `SECTION 1: CUSTOMER RENTAL BOOKINGS & REVENUE LEDGER\n`;
+    csvContent += `Customer Name,CNIC,Phone,Guarantor Name,Vehicle Model,Plate Number,Start Date,End Date,Days,Start KM,Return KM,Total KM,Extra KM Surcharge,Total Price,Advance Paid,Balance Due,Return Status,Payment Status\n`;
+    data.rentals.forEach(r => {
+      csvContent += `"${r.customerName}","${r.customerCnic}","${r.customerPhone || ''}","${r.guarantorName || ''}","${r.carNameModel}","${r.carPlateNumber}","${r.startDate}","${r.endDate}",${r.totalDays},${r.startOdometer || 0},${r.endOdometer || 0},${r.totalKmDriven || 0},${r.extraKmCharges || 0},${r.totalPrice},${r.advancePaid},${r.balanceDue},"${r.isReturned ? 'RETURNED' : 'ON RENT'}","${r.paymentStatus}"\n`;
+    });
+    csvContent += `\n`;
+
+    csvContent += `SECTION 2: INVESTOR FLEET SETTLEMENT & PAYOUT OBLIGATIONS\n`;
+    csvContent += `Investor Name,CNIC,Phone,Vehicle Model,Plate Number,Start Date,End Date,Agreed Payout,Advance Paid,Balance Due,Payment Status\n`;
+    data.investorRows.forEach(item => {
+      csvContent += `"${item.investorName}","${item.investorCnic}","${item.investorPhone || ''}","${item.vehicle.carNameModel}","${item.vehicle.carPlateNumber}","${item.vehicle.startDate}","${item.vehicle.endDate}",${item.vehicle.payoutAmount},${item.vehicle.advancePaid || 0},${item.vehicle.balanceDue || 0},"${item.vehicle.paymentStatus || 'PENDING'}"\n`;
+    });
+    csvContent += `\n`;
+
+    csvContent += `SECTION 3: VEHICLE MAINTENANCE & WORKSHOP EXPENSES\n`;
+    csvContent += `Date,Vehicle Model,Plate Number,Service Type,Vendor / Workshop,Odometer KM,Cost (PKR),Notes\n`;
+    data.maints.forEach(m => {
+      csvContent += `"${m.serviceDate}","${m.carNameModel}","${m.carPlateNumber}","${m.serviceType === 'Other' ? (m.customServiceType || 'Other') : m.serviceType}","${m.vendorName || ''}",${m.odometer || 0},${m.cost},"${(m.description || '').replace(/"/g, '""')}"\n`;
+    });
+    csvContent += `\n`;
+
+    csvContent += `SECTION 4: VEHICLE-BY-VEHICLE PROFITABILITY & ROI MATRIX\n`;
+    csvContent += `Plate Number,Vehicle Model,Bookings Count,Rental Revenue (PKR),Investor Payout (PKR),Maintenance Cost (PKR),Net Profit Margin (PKR)\n`;
+    data.vehicleMatrix.forEach(vm => {
+      csvContent += `"${vm.plate}","${vm.model}",${vm.rentalCount},${vm.rentalRevenue},${vm.investorPayout},${vm.maintenanceCost},${vm.netMargin}\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Al-Falah-Financial-Report-${start}-to-${end}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showNotification('Financial Report CSV exported successfully!', 'success');
+  };
 
   return (
     <div className="relative min-h-screen text-slate-900 font-serif antialiased p-4 md:p-8">
@@ -1677,25 +1771,6 @@ export function App() {
 
                 <div className="h-6 w-px bg-slate-300 hidden sm:block" />
 
-                {/* 5,000 KM Oil Change Matrix Tab */}
-                <button
-                  onClick={() => setActiveTab('oil-tracker')}
-                  className={`nav-tab-btn px-3 py-1.5 rounded-lg border font-bold transition font-serif flex items-center gap-1.5 ${
-                    activeTab === 'oil-tracker' 
-                      ? 'bg-emerald-950 text-white border-emerald-950 shadow-sm' 
-                      : 'bg-emerald-50 border-emerald-300 text-emerald-950 hover:bg-emerald-100'
-                  }`}
-                >
-                  <span>Oil Change Tracker (5,000 KM)</span>
-                  {oilMatrixSummary.overdue > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-700 text-white animate-pulse">
-                      {oilMatrixSummary.overdue} Overdue
-                    </span>
-                  )}
-                </button>
-
-                <div className="h-6 w-px bg-slate-300 hidden sm:block" />
-
                 {/* Advanced Dashboards: Agenda & 360 Vehicle Search & Accounts */}
                 <button
                   onClick={() => setActiveTab('agenda')}
@@ -1722,6 +1797,15 @@ export function App() {
                   }`}
                 >
                   Account Profile Ledgers
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('financial-reports')}
+                  className={`nav-tab-btn px-3 py-1.5 rounded-lg border font-bold transition font-serif ${
+                    activeTab === 'financial-reports' ? 'bg-emerald-900 text-white border-emerald-900 shadow-sm' : 'bg-emerald-50 border-emerald-300 text-emerald-950 hover:bg-emerald-100'
+                  }`}
+                >
+                  Financial Reports & Statement
                 </button>
 
               </nav>
@@ -3410,266 +3494,6 @@ export function App() {
           </main>
         )}
 
-        {/* TAB: 5,000 KM FLEET OIL CHANGE TRACKING & LIFECYCLE MATRIX */}
-        {activeTab === 'oil-tracker' && (
-          <main className="glass-panel p-6 rounded-xl space-y-6 font-serif animate-fade-in">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4 font-serif">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 font-serif">
-                  Fleet Engine Oil Change Matrix (5,000 KM Service Lifecycle)
-                </h2>
-                <p className="text-xs text-slate-600 mt-0.5 font-serif">
-                  خودکار مائلیج ٹریکر: کسٹمر بکنگز اور ریٹرن میٹر ریڈنگز کے تحت ہر 5000 کلومیٹر پر آئل چینج کا خودکار الرٹ
-                </p>
-              </div>
-
-              {/* Search Box */}
-              <div className="w-full sm:w-72">
-                <input
-                  type="text"
-                  placeholder="Search plate, model, investor..."
-                  value={oilTrackerSearch}
-                  onChange={(e) => setOilTrackerSearch(e.target.value)}
-                  className="w-full custom-input text-xs font-serif"
-                />
-              </div>
-            </div>
-
-            {/* Top Corporate KPI Metric Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-serif">
-              <div className="p-4 bg-[#faf9f5] border border-slate-200 rounded-lg font-serif">
-                <div className="text-xs text-slate-500 font-bold uppercase font-serif">Total Fleet Monitored</div>
-                <div className="text-2xl font-bold text-slate-900 mt-1 font-serif">{oilMatrixSummary.total} Vehicles</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">Active investor & rental fleet</div>
-              </div>
-
-              <div className={`p-4 rounded-lg font-serif border ${
-                oilMatrixSummary.overdue > 0 
-                  ? 'bg-rose-50 border-rose-300 text-rose-950' 
-                  : 'bg-[#faf9f5] border-slate-200 text-slate-900'
-              }`}>
-                <div className="text-xs font-bold uppercase tracking-wide opacity-80">Overdue (5,000+ KM)</div>
-                <div className="text-2xl font-bold mt-1">{oilMatrixSummary.overdue} Vehicles</div>
-                <div className="text-[11px] mt-0.5 font-medium">Immediate oil service required</div>
-              </div>
-
-              <div className={`p-4 rounded-lg font-serif border ${
-                oilMatrixSummary.dueSoon > 0 
-                  ? 'bg-amber-50 border-amber-300 text-amber-950' 
-                  : 'bg-[#faf9f5] border-slate-200 text-slate-900'
-              }`}>
-                <div className="text-xs font-bold uppercase tracking-wide opacity-80">Due Soon (4,500 - 5,000 KM)</div>
-                <div className="text-2xl font-bold mt-1">{oilMatrixSummary.dueSoon} Vehicles</div>
-                <div className="text-[11px] mt-0.5 font-medium">Within next 500 KM threshold</div>
-              </div>
-
-              <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-lg text-emerald-950 font-serif">
-                <div className="text-xs font-bold uppercase tracking-wide opacity-80">Healthy Condition</div>
-                <div className="text-2xl font-bold mt-1">{oilMatrixSummary.healthy} Vehicles</div>
-                <div className="text-[11px] mt-0.5 font-medium">Optimal engine oil condition</div>
-              </div>
-            </div>
-
-            {/* Status Filter Toolbar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 font-serif">
-              <div className="flex items-center gap-1.5 bg-[#faf9f5] p-1 border border-slate-300 rounded-lg text-xs font-serif">
-                <button
-                  onClick={() => setOilTrackerFilter('ALL')}
-                  className={`px-3 py-1.5 rounded font-bold font-serif transition ${
-                    oilTrackerFilter === 'ALL' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
-                  }`}
-                >
-                  All Vehicles ({oilMatrixSummary.total})
-                </button>
-
-                <button
-                  onClick={() => setOilTrackerFilter('OVERDUE')}
-                  className={`px-3 py-1.5 rounded font-bold font-serif transition ${
-                    oilTrackerFilter === 'OVERDUE' ? 'bg-rose-900 text-white shadow-xs' : 'text-rose-800 hover:bg-rose-100'
-                  }`}
-                >
-                  Overdue ({oilMatrixSummary.overdue})
-                </button>
-
-                <button
-                  onClick={() => setOilTrackerFilter('DUE_SOON')}
-                  className={`px-3 py-1.5 rounded font-bold font-serif transition ${
-                    oilTrackerFilter === 'DUE_SOON' ? 'bg-amber-800 text-white shadow-xs' : 'text-amber-800 hover:bg-amber-100'
-                  }`}
-                >
-                  Due Soon ({oilMatrixSummary.dueSoon})
-                </button>
-
-                <button
-                  onClick={() => setOilTrackerFilter('HEALTHY')}
-                  className={`px-3 py-1.5 rounded font-bold font-serif transition ${
-                    oilTrackerFilter === 'HEALTHY' ? 'bg-emerald-900 text-white shadow-xs' : 'text-emerald-800 hover:bg-emerald-100'
-                  }`}
-                >
-                  Healthy ({oilMatrixSummary.healthy})
-                </button>
-              </div>
-
-              <div className="text-xs text-slate-500 font-serif">
-                Showing <strong className="text-slate-800 font-mono">{filteredOilMatrix.length}</strong> of {fleetOilMatrix.length} fleet vehicles
-              </div>
-            </div>
-
-            {/* Matrix Data Table */}
-            {filteredOilMatrix.length === 0 ? (
-              <div className="p-12 text-center text-slate-500 text-xs bg-[#faf9f5] border border-slate-200 rounded-lg font-bold font-serif">
-                No fleet vehicles found matching the selected filter or search term.
-              </div>
-            ) : (
-              <div className="overflow-x-auto border border-slate-200 rounded-lg font-serif shadow-xs">
-                <table className="w-full text-left text-xs text-slate-900 border-collapse font-serif">
-                  <thead className="bg-[#faf9f5] border-b border-slate-300 font-bold text-slate-700 font-serif">
-                    <tr>
-                      <th className="p-3 border-r border-slate-200">#</th>
-                      <th className="p-3 border-r border-slate-200">Vehicle & Investor</th>
-                      <th className="p-3 border-r border-slate-200">Current Meter (KM)</th>
-                      <th className="p-3 border-r border-slate-200">Last Oil Service</th>
-                      <th className="p-3 border-r border-slate-200 min-w-[200px]">Distance Run (Since Oil Change)</th>
-                      <th className="p-3 border-r border-slate-200">Next Service Due</th>
-                      <th className="p-3 border-r border-slate-200">Service Status</th>
-                      <th className="p-3 text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 font-serif bg-white">
-                    {filteredOilMatrix.map((item, idx) => {
-                      const isOverdue = item.status === 'OVERDUE';
-                      const isDueSoon = item.status === 'DUE_SOON';
-
-                      return (
-                        <tr 
-                          key={item.plate} 
-                          className={`hover:bg-slate-50 transition font-serif ${
-                            isOverdue ? 'bg-rose-50/40' : isDueSoon ? 'bg-amber-50/30' : ''
-                          }`}
-                        >
-                          <td className="p-3 border-r border-slate-200 text-slate-500 font-mono">
-                            {idx + 1}
-                          </td>
-
-                          <td className="p-3 border-r border-slate-200 font-serif">
-                            <div className="font-bold text-slate-900">{item.model}</div>
-                            <button
-                              onClick={() => {
-                                setSelectedLookupPlate(item.plate);
-                                setActiveTab('vehicle-360');
-                              }}
-                              className="font-mono text-xs font-bold text-indigo-900 hover:underline block mt-0.5"
-                            >
-                              [{item.plate}]
-                            </button>
-                            <span className="text-[10px] text-slate-500 block font-serif mt-0.5">
-                              Owner: {item.investorName}
-                            </span>
-                          </td>
-
-                          <td className="p-3 border-r border-slate-200 font-bold font-mono text-slate-900 font-serif text-sm">
-                            {item.currentOdometer.toLocaleString()} KM
-                          </td>
-
-                          <td className="p-3 border-r border-slate-200 text-[11px] font-serif space-y-0.5">
-                            <div>
-                              Meter: <strong className="font-mono text-slate-800">{item.lastOilChangeOdometer.toLocaleString()} KM</strong>
-                            </div>
-                            <div className="text-slate-500 text-[10px]">
-                              Date: {item.lastOilChangeDate}
-                            </div>
-                          </td>
-
-                          <td className="p-3 border-r border-slate-200 font-serif space-y-1.5">
-                            <div className="flex items-center justify-between text-[11px]">
-                              <span className="font-bold font-mono text-slate-800">
-                                {item.kmSinceLastOilChange.toLocaleString()} / 5,000 KM
-                              </span>
-                              <span className={`text-[10px] font-bold ${
-                                isOverdue ? 'text-rose-800' : isDueSoon ? 'text-amber-800' : 'text-slate-600'
-                              }`}>
-                                {item.progressPercent}%
-                              </span>
-                            </div>
-
-                            {/* Formal Linear Progress Bar */}
-                            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all duration-300 ${
-                                  isOverdue ? 'bg-rose-700' : isDueSoon ? 'bg-amber-600' : 'bg-emerald-700'
-                                }`}
-                                style={{ width: `${Math.min(100, item.progressPercent)}%` }}
-                              />
-                            </div>
-
-                            <div className="text-[10px] text-slate-500">
-                              {isOverdue ? (
-                                <span className="text-rose-800 font-bold">
-                                  +{(item.kmSinceLastOilChange - 5000).toLocaleString()} KM Exceeded
-                                </span>
-                              ) : (
-                                <span>{item.kmRemaining.toLocaleString()} KM Remaining</span>
-                              )}
-                            </div>
-                          </td>
-
-                          <td className="p-3 border-r border-slate-200 font-serif">
-                            <div className="font-mono font-bold text-slate-800">
-                              {item.nextDueOdometer.toLocaleString()} KM
-                            </div>
-                            <span className="text-[10px] text-slate-500 block">
-                              Scheduled at +5,000 KM
-                            </span>
-                          </td>
-
-                          <td className="p-3 border-r border-slate-200 font-serif">
-                            {isOverdue && (
-                              <span className="px-2.5 py-1 rounded text-[10px] font-bold bg-rose-100 text-rose-900 border border-rose-300 block text-center">
-                                OVERDUE
-                              </span>
-                            )}
-                            {isDueSoon && (
-                              <span className="px-2.5 py-1 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 block text-center">
-                                DUE SOON
-                              </span>
-                            )}
-                            {!isOverdue && !isDueSoon && (
-                              <span className="px-2.5 py-1 rounded text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 block text-center">
-                                HEALTHY
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="p-3 text-center space-y-1 font-serif">
-                            <button
-                              onClick={() => openQuickOilServiceModal(item)}
-                              className="w-full px-2.5 py-1.5 text-[11px] font-bold bg-slate-900 hover:bg-slate-800 text-white rounded transition font-serif shadow-xs"
-                              title="Record engine oil and filter change service"
-                            >
-                              Record Oil Service
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                setSelectedLookupPlate(item.plate);
-                                setActiveTab('vehicle-360');
-                              }}
-                              className="w-full px-2 py-0.5 text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded transition font-serif"
-                            >
-                              History
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-          </main>
-        )}
-
         {/* TAB 7: FINANCIAL PAYMENT AGENDA (TODAY / NEXT 2 DAYS / NEXT 3-5 DAYS / THIS WEEK) */}
         {activeTab === 'agenda' && (
           <main className="glass-panel p-6 rounded-xl space-y-6 font-serif animate-fade-in">
@@ -3879,31 +3703,11 @@ export function App() {
                       )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3">
-                      {/* Oil Change Health Indicator */}
-                      {(() => {
-                        const oilStat = fleetOilMatrix.find(o => o.plate.toUpperCase() === lookupVehicleProfile.plate.toUpperCase());
-                        if (!oilStat) return null;
-                        return (
-                          <div className="p-3 bg-white/10 border border-white/20 rounded-lg text-right font-serif">
-                            <div className="text-[10px] uppercase tracking-wider text-slate-300 font-bold font-serif">
-                              5,000 KM Oil Status
-                            </div>
-                            <div className={`text-xs font-bold font-serif mt-0.5 ${
-                              oilStat.status === 'OVERDUE' ? 'text-rose-400' : oilStat.status === 'DUE_SOON' ? 'text-amber-300' : 'text-emerald-400'
-                            }`}>
-                              {oilStat.kmSinceLastOilChange.toLocaleString()} / 5,000 KM ({oilStat.status})
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {/* Net Cashflow Card */}
-                      <div className="p-3 bg-white/10 border border-white/20 rounded-lg text-right font-serif">
-                        <div className="text-[10px] uppercase tracking-wider text-slate-300 font-bold font-serif">Net Profit / Cashflow</div>
-                        <div className={`text-xl font-bold font-serif ${lookupVehicleProfile.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          Rs. {lookupVehicleProfile.netProfit.toLocaleString()}
-                        </div>
+                    {/* Net Cashflow Card */}
+                    <div className="p-3 bg-white/10 border border-white/20 rounded-lg text-right font-serif">
+                      <div className="text-[10px] uppercase tracking-wider text-slate-300 font-bold font-serif">Net Profit / Cashflow</div>
+                      <div className={`text-xl font-bold font-serif ${lookupVehicleProfile.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        Rs. {lookupVehicleProfile.netProfit.toLocaleString()}
                       </div>
                     </div>
                   </div>
@@ -4376,6 +4180,793 @@ export function App() {
 
               </div>
             )}
+          </main>
+        )}
+
+        {/* TAB 11: EXECUTIVE FINANCIAL STATEMENT & REPORT GENERATOR */}
+        {activeTab === 'financial-reports' && (
+          <main className="glass-panel p-6 rounded-xl space-y-6 font-serif animate-fade-in">
+            
+            {/* Header & Filter Controls Bar (no-print on action buttons, printable header on print) */}
+            <div className="border-b border-slate-200 pb-4 space-y-4 font-serif">
+              
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                  <div className="text-[11px] uppercase tracking-widest text-slate-500 font-bold mb-0.5">
+                    Executive Financial Reporting & Auditing
+                  </div>
+                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    Executive Financial Statement & Operational Ledger
+                  </h2>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Consolidated Revenue, Investor Fleet Obligations, Workshop Maintenance Expenses & Net ROI Matrix
+                  </p>
+                </div>
+
+                {/* Export & Action Buttons */}
+                <div className="flex flex-wrap items-center gap-2 self-start lg:self-center no-print">
+                  <button
+                    onClick={() => window.print()}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-950 text-white font-bold text-xs rounded-lg transition shadow-xs flex items-center gap-1.5"
+                    title="Print or Save formal PDF report"
+                  >
+                    Print / Export PDF
+                  </button>
+
+                  <button
+                    onClick={handleDownloadFinancialCsv}
+                    className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded-lg transition shadow-xs flex items-center gap-1.5"
+                    title="Export complete financial ledger to Excel / CSV"
+                  >
+                    Download CSV Spreadsheet
+                  </button>
+                </div>
+              </div>
+
+              {/* Time Frame & Filter Toolbar (no-print) */}
+              <div className="p-4 bg-[#faf9f5] border border-slate-300 rounded-xl space-y-3 no-print">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                    Filter Time Lapse & Reporting Criteria:
+                  </span>
+                  <span className="text-xs text-slate-600 font-serif">
+                    Active Period: <strong className="text-slate-900">{reportDateRange.label}</strong> ({reportDateRange.start} to {reportDateRange.end})
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                  {/* Preset Selector */}
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">Time Lapse Range</label>
+                    <select
+                      value={reportPreset}
+                      onChange={(e: any) => setReportPreset(e.target.value)}
+                      className="w-full custom-input font-serif font-bold text-xs py-1.5"
+                    >
+                      <option value="this-week">Weekly (Past 7 Days)</option>
+                      <option value="this-month">Monthly (Past 30 Days)</option>
+                      <option value="this-quarter">Quarterly (Past 90 Days)</option>
+                      <option value="this-year">Current Year to Date</option>
+                      <option value="all-time">All-Time Consolidated</option>
+                      <option value="custom">Custom Date Range...</option>
+                    </select>
+                  </div>
+
+                  {/* Custom Date Pickers */}
+                  {reportPreset === 'custom' ? (
+                    <>
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Start Date</label>
+                        <input
+                          type="date"
+                          value={reportCustomStart}
+                          onChange={(e) => setReportCustomStart(e.target.value)}
+                          className="w-full custom-input font-serif font-bold text-xs py-1.5"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">End Date</label>
+                        <input
+                          type="date"
+                          value={reportCustomEnd}
+                          onChange={(e) => setReportCustomEnd(e.target.value)}
+                          className="w-full custom-input font-serif font-bold text-xs py-1.5"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Vehicle Filter */}
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Vehicle Plate Filter</label>
+                        <select
+                          value={reportVehicleFilter}
+                          onChange={(e) => setReportVehicleFilter(e.target.value)}
+                          className="w-full custom-input font-serif font-bold text-xs py-1.5 font-mono"
+                        >
+                          <option value="ALL">All Fleet Vehicles</option>
+                          {allUniquePlates.map(plate => (
+                            <option key={plate} value={plate}>
+                              {plate}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Payment Status Filter */}
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Payment Status Filter</label>
+                        <select
+                          value={reportPaymentFilter}
+                          onChange={(e) => setReportPaymentFilter(e.target.value)}
+                          className="w-full custom-input font-serif font-bold text-xs py-1.5"
+                        >
+                          <option value="ALL">All Payments (Paid & Due)</option>
+                          <option value="PAID_FULL">Paid in Full Only</option>
+                          <option value="PENDING">Pending Dues Only</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {reportPreset === 'custom' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">Vehicle Plate Filter</label>
+                      <select
+                        value={reportVehicleFilter}
+                        onChange={(e) => setReportVehicleFilter(e.target.value)}
+                        className="w-full custom-input font-serif font-bold text-xs py-1.5 font-mono"
+                      >
+                        <option value="ALL">All Fleet Vehicles</option>
+                        {allUniquePlates.map(plate => (
+                          <option key={plate} value={plate}>
+                            {plate}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-700 font-bold mb-1">Payment Status Filter</label>
+                      <select
+                        value={reportPaymentFilter}
+                        onChange={(e) => setReportPaymentFilter(e.target.value)}
+                        className="w-full custom-input font-serif font-bold text-xs py-1.5"
+                      >
+                        <option value="ALL">All Payments (Paid & Due)</option>
+                        <option value="PAID_FULL">Paid in Full Only</option>
+                        <option value="PENDING">Pending Dues Only</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </div>
+
+            {/* PRINT-ONLY FORMAL LETTERHEAD (Visible only in Print / PDF) */}
+            <div className="hidden print:block border-b-2 border-slate-900 pb-4 mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-2xl font-bold uppercase tracking-wider text-slate-950">
+                    Al-Falah Rent A Car & Luxury Fleet Management
+                  </h1>
+                  <p className="text-xs text-slate-700 mt-0.5">
+                    Official Executive Financial Statement & Audited Operations Ledger
+                  </p>
+                </div>
+                <div className="text-right text-xs text-slate-700">
+                  <div>Date: <strong>{todayIso}</strong></div>
+                  <div>Report Lapse: <strong>{reportDateRange.label}</strong></div>
+                  <div>Range: <strong>{reportDateRange.start} to {reportDateRange.end}</strong></div>
+                </div>
+              </div>
+            </div>
+
+            {/* EXECUTIVE FINANCIAL SUMMARY METRIC CARDS */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 text-xs font-serif">
+              {/* Card 1: Gross Revenue */}
+              <div className="p-3.5 bg-white border border-slate-300 rounded-xl space-y-1 shadow-xs">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">
+                  Gross Rental Turnover
+                </span>
+                <div className="text-base font-bold text-slate-950 font-mono">
+                  Rs. {reportFinancialData.grossRentalRevenue.toLocaleString()}
+                </div>
+                <div className="text-[10px] text-emerald-800 font-medium">
+                  Advance: Rs. {reportFinancialData.advanceCashCollected.toLocaleString()}
+                </div>
+              </div>
+
+              {/* Card 2: Customer Receivables Due */}
+              <div className="p-3.5 bg-white border border-slate-300 rounded-xl space-y-1 shadow-xs">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">
+                  Customer Dues Left
+                </span>
+                <div className="text-base font-bold text-rose-800 font-mono">
+                  Rs. {reportFinancialData.accountsReceivableDue.toLocaleString()}
+                </div>
+                <div className="text-[10px] text-slate-600">
+                  Recovery: <strong>{reportFinancialData.collectionRate}%</strong>
+                </div>
+              </div>
+
+              {/* Card 3: Investor Liabilities */}
+              <div className="p-3.5 bg-white border border-slate-300 rounded-xl space-y-1 shadow-xs">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">
+                  Investor Obligations
+                </span>
+                <div className="text-base font-bold text-amber-900 font-mono">
+                  Rs. {reportFinancialData.totalInvestorPayoutLiability.toLocaleString()}
+                </div>
+                <div className="text-[10px] text-slate-600">
+                  Payable: Rs. {reportFinancialData.investorBalancePayable.toLocaleString()}
+                </div>
+              </div>
+
+              {/* Card 4: Maintenance Expenses */}
+              <div className="p-3.5 bg-white border border-slate-300 rounded-xl space-y-1 shadow-xs">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">
+                  Workshop Maintenance
+                </span>
+                <div className="text-base font-bold text-slate-900 font-mono">
+                  Rs. {reportFinancialData.totalMaintenanceExpenses.toLocaleString()}
+                </div>
+                <div className="text-[10px] text-slate-600">
+                  {reportFinancialData.maints.length} Service Logs
+                </div>
+              </div>
+
+              {/* Card 5: Net Operating Profit */}
+              <div className={`p-3.5 border rounded-xl space-y-1 shadow-xs ${
+                reportFinancialData.netOperatingProfit >= 0 ? 'bg-emerald-50/60 border-emerald-300' : 'bg-rose-50/60 border-rose-300'
+              }`}>
+                <span className="text-[10px] uppercase font-bold text-slate-700 block">
+                  Net Operating Profit
+                </span>
+                <div className={`text-base font-bold font-mono ${
+                  reportFinancialData.netOperatingProfit >= 0 ? 'text-emerald-900' : 'text-rose-900'
+                }`}>
+                  Rs. {reportFinancialData.netOperatingProfit.toLocaleString()}
+                </div>
+                <div className="text-[10px] font-bold text-slate-700">
+                  Margin: {reportFinancialData.profitMargin}%
+                </div>
+              </div>
+
+              {/* Card 6: Total Bookings */}
+              <div className="p-3.5 bg-white border border-slate-300 rounded-xl space-y-1 shadow-xs">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">
+                  Active Fleet Activity
+                </span>
+                <div className="text-base font-bold text-indigo-950 font-mono">
+                  {reportFinancialData.rentals.length} Rentals
+                </div>
+                <div className="text-[10px] text-slate-600">
+                  Across {reportFinancialData.vehicleMatrix.length} Vehicles
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION SWITCHER BUTTONS (no-print) */}
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-2 text-xs no-print">
+              <button
+                onClick={() => setReportActiveSection('all')}
+                className={`px-3 py-1.5 rounded-md font-bold transition ${
+                  reportActiveSection === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                All Report Statements
+              </button>
+              <button
+                onClick={() => setReportActiveSection('rentals')}
+                className={`px-3 py-1.5 rounded-md font-bold transition ${
+                  reportActiveSection === 'rentals' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                1. Customer Rentals ({reportFinancialData.rentals.length})
+              </button>
+              <button
+                onClick={() => setReportActiveSection('investors')}
+                className={`px-3 py-1.5 rounded-md font-bold transition ${
+                  reportActiveSection === 'investors' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                2. Investor Obligations ({reportFinancialData.investorRows.length})
+              </button>
+              <button
+                onClick={() => setReportActiveSection('maintenance')}
+                className={`px-3 py-1.5 rounded-md font-bold transition ${
+                  reportActiveSection === 'maintenance' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                3. Workshop Expenses ({reportFinancialData.maints.length})
+              </button>
+              <button
+                onClick={() => setReportActiveSection('roi')}
+                className={`px-3 py-1.5 rounded-md font-bold transition ${
+                  reportActiveSection === 'roi' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                4. Vehicle Profitability Matrix ({reportFinancialData.vehicleMatrix.length})
+              </button>
+            </div>
+
+            {/* DETAILED STATEMENTS TABLES */}
+            <div className="space-y-6">
+              
+              {/* STATEMENT 1: CUSTOMER RENTALS & REVENUE LEDGER */}
+              {(reportActiveSection === 'all' || reportActiveSection === 'rentals') && (
+                <div className="bg-white border border-slate-300 rounded-xl overflow-hidden shadow-xs">
+                  <div className="p-3.5 bg-slate-900 text-white flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-xs uppercase tracking-wide">
+                        Section 1: Customer Rental Bookings & Revenue Ledger
+                      </h3>
+                      <p className="text-[11px] text-slate-300 mt-0.5">
+                        Breakdown of rental turnover, meter distance, advance cash inflow, and outstanding dues
+                      </p>
+                    </div>
+                    <span className="text-xs text-slate-300 font-mono">
+                      Subtotal: Rs. {reportFinancialData.grossRentalRevenue.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse font-serif">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold uppercase tracking-wider text-[10px]">
+                          <th className="p-2.5 border-r border-slate-200 w-10 text-center">#</th>
+                          <th className="p-2.5 border-r border-slate-200">Customer Details</th>
+                          <th className="p-2.5 border-r border-slate-200">Guarantor</th>
+                          <th className="p-2.5 border-r border-slate-200">Vehicle</th>
+                          <th className="p-2.5 border-r border-slate-200">Rental Period</th>
+                          <th className="p-2.5 border-r border-slate-200">Meter / KM</th>
+                          <th className="p-2.5 border-r border-slate-200 text-right">Total Rent</th>
+                          <th className="p-2.5 border-r border-slate-200 text-right">Advance Paid</th>
+                          <th className="p-2.5 border-r border-slate-200 text-right">Balance Due</th>
+                          <th className="p-2.5 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {reportFinancialData.rentals.length === 0 ? (
+                          <tr>
+                            <td colSpan={10} className="p-6 text-center text-slate-500 italic">
+                              No customer rental bookings match the selected time lapse and criteria.
+                            </td>
+                          </tr>
+                        ) : (
+                          reportFinancialData.rentals.map((r, idx) => (
+                            <tr key={r._id || r.id || idx} className="hover:bg-slate-50/70 transition">
+                              <td className="p-2.5 border-r border-slate-200 text-center font-mono text-slate-500">
+                                {idx + 1}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200">
+                                <strong className="text-slate-900 block">{r.customerName}</strong>
+                                <span className="text-[11px] text-slate-500 font-mono">{r.customerCnic}</span>
+                                {r.customerPhone && <div className="text-[10px] text-slate-500 font-mono">{r.customerPhone}</div>}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 text-[11px]">
+                                {r.guarantorName ? (
+                                  <div>
+                                    <strong className="text-slate-900">{r.guarantorName}</strong>
+                                    {r.guarantorFatherName && <div className="text-slate-500 text-[10px]">S/O {r.guarantorFatherName}</div>}
+                                    {r.guarantorCnic && <div className="text-slate-500 font-mono text-[10px]">{r.guarantorCnic}</div>}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 italic">No Guarantor</span>
+                                )}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200">
+                                <div className="font-bold text-slate-900">{r.carNameModel}</div>
+                                <span className="font-mono text-[11px] text-indigo-900 font-bold block">
+                                  [{r.carPlateNumber}]
+                                </span>
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 text-[11px]">
+                                <div>{r.startDate} to {r.endDate}</div>
+                                <span className="text-slate-600 font-bold font-mono">({r.totalDays} Days)</span>
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 text-[11px]">
+                                {r.isReturned ? (
+                                  <div className="space-y-0.5 font-mono">
+                                    <div>Start: {r.startOdometer?.toLocaleString()} KM</div>
+                                    <div>End: {r.endOdometer?.toLocaleString()} KM</div>
+                                    <div className="font-bold text-indigo-950">Driven: {r.totalKmDriven?.toLocaleString()} KM</div>
+                                    {(r.extraKmCharges || 0) > 0 && (
+                                      <div className="text-rose-700 text-[10px] font-bold">
+                                        Extra: +Rs. {r.extraKmCharges?.toLocaleString()}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="text-[11px] text-slate-500">
+                                    Start: <strong className="font-mono">{r.startOdometer?.toLocaleString() || 0} KM</strong>
+                                    <div className="text-[10px] text-amber-800">On Road</div>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 text-right font-mono font-bold text-slate-900">
+                                Rs. {(r.totalPrice || 0).toLocaleString()}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 text-right font-mono font-bold text-emerald-800">
+                                Rs. {(r.advancePaid || 0).toLocaleString()}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 text-right font-mono font-bold text-rose-800">
+                                Rs. {(r.balanceDue || 0).toLocaleString()}
+                              </td>
+                              <td className="p-2.5 text-center">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold block ${
+                                  r.paymentStatus === 'PAID_FULL'
+                                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                    : 'bg-rose-100 text-rose-900 border border-rose-300'
+                                }`}>
+                                  {r.paymentStatus === 'PAID_FULL' ? 'PAID FULL' : 'PENDING'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      {reportFinancialData.rentals.length > 0 && (
+                        <tfoot>
+                          <tr className="bg-slate-100 font-bold border-t-2 border-slate-300 text-slate-900">
+                            <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider text-[11px]">
+                              Total Customer Revenue Breakdown:
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-slate-950">
+                              Rs. {reportFinancialData.grossRentalRevenue.toLocaleString()}
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-emerald-900">
+                              Rs. {reportFinancialData.advanceCashCollected.toLocaleString()}
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-rose-900">
+                              Rs. {reportFinancialData.accountsReceivableDue.toLocaleString()}
+                            </td>
+                            <td className="p-2.5 text-center text-[10px] text-slate-600">
+                              {reportFinancialData.collectionRate}% Collected
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* STATEMENT 2: INVESTOR FLEET SETTLEMENT & PAYOUT OBLIGATIONS */}
+              {(reportActiveSection === 'all' || reportActiveSection === 'investors') && (
+                <div className="bg-white border border-slate-300 rounded-xl overflow-hidden shadow-xs">
+                  <div className="p-3.5 bg-slate-900 text-white flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-xs uppercase tracking-wide">
+                        Section 2: Investor Fleet Settlement & Payout Obligations
+                      </h3>
+                      <p className="text-[11px] text-slate-300 mt-0.5">
+                        Agreed investor car earnings, disbursed advances, and remaining payables
+                      </p>
+                    </div>
+                    <span className="text-xs text-slate-300 font-mono">
+                      Subtotal: Rs. {reportFinancialData.totalInvestorPayoutLiability.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse font-serif">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold uppercase tracking-wider text-[10px]">
+                          <th className="p-2.5 border-r border-slate-200 w-10 text-center">#</th>
+                          <th className="p-2.5 border-r border-slate-200">Investor Details</th>
+                          <th className="p-2.5 border-r border-slate-200">Vehicle Deposited</th>
+                          <th className="p-2.5 border-r border-slate-200">Contract Duration</th>
+                          <th className="p-2.5 border-r border-slate-200 text-right">Agreed Payout</th>
+                          <th className="p-2.5 border-r border-slate-200 text-right">Advance Given</th>
+                          <th className="p-2.5 border-r border-slate-200 text-right">Balance Payable</th>
+                          <th className="p-2.5 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {reportFinancialData.investorRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="p-6 text-center text-slate-500 italic">
+                              No investor payout obligations match the selected criteria.
+                            </td>
+                          </tr>
+                        ) : (
+                          reportFinancialData.investorRows.map((item, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/70 transition">
+                              <td className="p-2.5 border-r border-slate-200 text-center font-mono text-slate-500">
+                                {idx + 1}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200">
+                                <strong className="text-slate-900 block">{item.investorName}</strong>
+                                <span className="text-[11px] text-slate-500 font-mono">{item.investorCnic}</span>
+                                {item.investorPhone && <div className="text-[10px] text-slate-500 font-mono">{item.investorPhone}</div>}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200">
+                                <div className="font-bold text-slate-900">{item.vehicle.carNameModel}</div>
+                                <span className="font-mono text-[11px] text-indigo-900 font-bold block">
+                                  [{item.vehicle.carPlateNumber}]
+                                </span>
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 text-[11px]">
+                                <div>{item.vehicle.startDate} to {item.vehicle.endDate}</div>
+                                <span className="text-slate-600 font-bold font-mono">({item.vehicle.totalDays} Days)</span>
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 text-right font-mono font-bold text-slate-900">
+                                Rs. {(item.vehicle.payoutAmount || 0).toLocaleString()}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 text-right font-mono font-bold text-emerald-800">
+                                Rs. {(item.vehicle.advancePaid || 0).toLocaleString()}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 text-right font-mono font-bold text-amber-900">
+                                Rs. {(item.vehicle.balanceDue || 0).toLocaleString()}
+                              </td>
+                              <td className="p-2.5 text-center">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold block ${
+                                  item.vehicle.paymentStatus === 'PAID_FULL'
+                                    ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                    : 'bg-amber-100 text-amber-900 border border-amber-300'
+                                }`}>
+                                  {item.vehicle.paymentStatus === 'PAID_FULL' ? 'PAID FULL' : 'PENDING'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      {reportFinancialData.investorRows.length > 0 && (
+                        <tfoot>
+                          <tr className="bg-slate-100 font-bold border-t-2 border-slate-300 text-slate-900">
+                            <td colSpan={4} className="p-2.5 text-right uppercase tracking-wider text-[11px]">
+                              Total Investor Payout Liabilities:
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-slate-950">
+                              Rs. {reportFinancialData.totalInvestorPayoutLiability.toLocaleString()}
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-emerald-900">
+                              Rs. {reportFinancialData.investorAdvancePaid.toLocaleString()}
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-amber-950">
+                              Rs. {reportFinancialData.investorBalancePayable.toLocaleString()}
+                            </td>
+                            <td className="p-2.5 text-center text-[10px] text-slate-600">
+                              Verified
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* STATEMENT 3: VEHICLE MAINTENANCE & WORKSHOP EXPENSES */}
+              {(reportActiveSection === 'all' || reportActiveSection === 'maintenance') && (
+                <div className="bg-white border border-slate-300 rounded-xl overflow-hidden shadow-xs">
+                  <div className="p-3.5 bg-slate-900 text-white flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-xs uppercase tracking-wide">
+                        Section 3: Vehicle Maintenance & Workshop Expenses
+                      </h3>
+                      <p className="text-[11px] text-slate-300 mt-0.5">
+                        Log of mechanical repairs, oil/filter services, spare parts, and vendor costs
+                      </p>
+                    </div>
+                    <span className="text-xs text-slate-300 font-mono">
+                      Subtotal: Rs. {reportFinancialData.totalMaintenanceExpenses.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse font-serif">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold uppercase tracking-wider text-[10px]">
+                          <th className="p-2.5 border-r border-slate-200 w-10 text-center">#</th>
+                          <th className="p-2.5 border-r border-slate-200">Date</th>
+                          <th className="p-2.5 border-r border-slate-200">Vehicle</th>
+                          <th className="p-2.5 border-r border-slate-200">Service Category</th>
+                          <th className="p-2.5 border-r border-slate-200">Workshop / Vendor</th>
+                          <th className="p-2.5 border-r border-slate-200">Odometer</th>
+                          <th className="p-2.5 border-r border-slate-200 text-right">Cost Incurred</th>
+                          <th className="p-2.5">Work Details / Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {reportFinancialData.maints.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="p-6 text-center text-slate-500 italic">
+                              No vehicle maintenance expenses recorded within this time lapse.
+                            </td>
+                          </tr>
+                        ) : (
+                          reportFinancialData.maints.map((m, idx) => (
+                            <tr key={m._id || m.id || idx} className="hover:bg-slate-50/70 transition">
+                              <td className="p-2.5 border-r border-slate-200 text-center font-mono text-slate-500">
+                                {idx + 1}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 font-mono text-slate-700">
+                                {m.serviceDate}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200">
+                                <strong className="text-slate-900 block">{m.carNameModel}</strong>
+                                <span className="font-mono text-[11px] text-indigo-900 font-bold">
+                                  [{m.carPlateNumber}]
+                                </span>
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 font-bold text-slate-800">
+                                {m.serviceType === 'Other' ? (m.customServiceType || 'Other Service') : m.serviceType}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 text-slate-700">
+                                {m.vendorName || '—'}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 font-mono text-slate-700">
+                                {m.odometer ? `${m.odometer.toLocaleString()} KM` : '—'}
+                              </td>
+                              <td className="p-2.5 border-r border-slate-200 text-right font-mono font-bold text-rose-900">
+                                Rs. {(m.cost || 0).toLocaleString()}
+                              </td>
+                              <td className="p-2.5 text-slate-600 text-[11px]">
+                                {m.description || '—'}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                      {reportFinancialData.maints.length > 0 && (
+                        <tfoot>
+                          <tr className="bg-slate-100 font-bold border-t-2 border-slate-300 text-slate-900">
+                            <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider text-[11px]">
+                              Total Workshop & Maintenance Costs:
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-rose-950">
+                              Rs. {reportFinancialData.totalMaintenanceExpenses.toLocaleString()}
+                            </td>
+                            <td className="p-2.5 text-slate-600 text-[10px]">
+                              Verified
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* STATEMENT 4: VEHICLE-BY-VEHICLE PROFITABILITY & ROI MATRIX */}
+              {(reportActiveSection === 'all' || reportActiveSection === 'roi') && (
+                <div className="bg-white border border-slate-300 rounded-xl overflow-hidden shadow-xs">
+                  <div className="p-3.5 bg-slate-900 text-white flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-xs uppercase tracking-wide">
+                        Section 4: Vehicle-by-Vehicle Profitability & ROI Matrix
+                      </h3>
+                      <p className="text-[11px] text-slate-300 mt-0.5">
+                        Performance matrix of rental revenue inflow vs. investor and maintenance expenses per car
+                      </p>
+                    </div>
+                    <span className="text-xs text-slate-300 font-mono">
+                      Net Profit: Rs. {reportFinancialData.netOperatingProfit.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse font-serif">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-bold uppercase tracking-wider text-[10px]">
+                          <th className="p-2.5 border-r border-slate-200 w-10 text-center">#</th>
+                          <th className="p-2.5 border-r border-slate-200">Vehicle Model & Plate</th>
+                          <th className="p-2.5 border-r border-slate-200 text-center">Rentals</th>
+                          <th className="p-2.5 border-r border-slate-200 text-right">Rental Inflow</th>
+                          <th className="p-2.5 border-r border-slate-200 text-right">Investor Outflow</th>
+                          <th className="p-2.5 border-r border-slate-200 text-right">Maintenance Cost</th>
+                          <th className="p-2.5 border-r border-slate-200 text-right">Net Profit Margin</th>
+                          <th className="p-2.5 text-center">Margin %</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {reportFinancialData.vehicleMatrix.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="p-6 text-center text-slate-500 italic">
+                              No vehicle activities recorded in this reporting timeframe.
+                            </td>
+                          </tr>
+                        ) : (
+                          reportFinancialData.vehicleMatrix.map((vm, idx) => {
+                            const marginPct = vm.rentalRevenue > 0 ? ((vm.netMargin / vm.rentalRevenue) * 100).toFixed(1) : '0.0';
+                            return (
+                              <tr key={vm.plate || idx} className="hover:bg-slate-50/70 transition">
+                                <td className="p-2.5 border-r border-slate-200 text-center font-mono text-slate-500">
+                                  {idx + 1}
+                                </td>
+                                <td className="p-2.5 border-r border-slate-200">
+                                  <strong className="text-slate-900 block">{vm.model}</strong>
+                                  <span className="font-mono text-[11px] text-indigo-900 font-bold">
+                                    [{vm.plate}]
+                                  </span>
+                                </td>
+                                <td className="p-2.5 border-r border-slate-200 text-center font-mono font-bold text-slate-700">
+                                  {vm.rentalCount}
+                                </td>
+                                <td className="p-2.5 border-r border-slate-200 text-right font-mono font-bold text-slate-900">
+                                  Rs. {vm.rentalRevenue.toLocaleString()}
+                                </td>
+                                <td className="p-2.5 border-r border-slate-200 text-right font-mono font-bold text-amber-900">
+                                  Rs. {vm.investorPayout.toLocaleString()}
+                                </td>
+                                <td className="p-2.5 border-r border-slate-200 text-right font-mono font-bold text-rose-900">
+                                  Rs. {vm.maintenanceCost.toLocaleString()}
+                                </td>
+                                <td className={`p-2.5 border-r border-slate-200 text-right font-mono font-bold ${
+                                  vm.netMargin >= 0 ? 'text-emerald-900' : 'text-rose-900'
+                                }`}>
+                                  Rs. {vm.netMargin.toLocaleString()}
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    vm.netMargin >= 0 ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-900'
+                                  }`}>
+                                    {marginPct}%
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                      {reportFinancialData.vehicleMatrix.length > 0 && (
+                        <tfoot>
+                          <tr className="bg-slate-100 font-bold border-t-2 border-slate-300 text-slate-900">
+                            <td colSpan={3} className="p-2.5 text-right uppercase tracking-wider text-[11px]">
+                              Total Fleet Operating Performance:
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-slate-950">
+                              Rs. {reportFinancialData.grossRentalRevenue.toLocaleString()}
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-amber-950">
+                              Rs. {reportFinancialData.totalInvestorPayoutLiability.toLocaleString()}
+                            </td>
+                            <td className="p-2.5 text-right font-mono text-rose-950">
+                              Rs. {reportFinancialData.totalMaintenanceExpenses.toLocaleString()}
+                            </td>
+                            <td className={`p-2.5 text-right font-mono ${
+                              reportFinancialData.netOperatingProfit >= 0 ? 'text-emerald-950' : 'text-rose-950'
+                            }`}>
+                              Rs. {reportFinancialData.netOperatingProfit.toLocaleString()}
+                            </td>
+                            <td className="p-2.5 text-center font-mono">
+                              {reportFinancialData.profitMargin}%
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* FORMAL SIGN-OFF & PRINT FOOTER (Visible on print only) */}
+            <div className="hidden print:block pt-10 border-t border-slate-300 mt-8 text-xs font-serif">
+              <div className="grid grid-cols-3 gap-8 text-center">
+                <div>
+                  <div className="border-t border-slate-400 pt-1 font-bold">Prepared By</div>
+                  <div className="text-slate-500 text-[10px]">Operations & Accounting Dept</div>
+                </div>
+                <div>
+                  <div className="border-t border-slate-400 pt-1 font-bold">Audited By</div>
+                  <div className="text-slate-500 text-[10px]">Finance Manager</div>
+                </div>
+                <div>
+                  <div className="border-t border-slate-400 pt-1 font-bold">Authorized Signature</div>
+                  <div className="text-slate-500 text-[10px]">Al-Falah Executive Directorate</div>
+                </div>
+              </div>
+            </div>
+
           </main>
         )}
       </>
@@ -5419,156 +6010,6 @@ export function App() {
             </div>
           );
         })()}
-
-        {/* QUICK RECORD OIL SERVICE MODAL DIALOG */}
-        {oilServiceModalVehicle && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-serif">
-            <div className="bg-white border border-slate-300 rounded-2xl p-6 max-w-lg w-full max-h-[92vh] overflow-y-auto font-serif space-y-5 shadow-2xl">
-              
-              {/* Modal Header */}
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <div>
-                  <h3 className="font-bold text-slate-900 text-lg">
-                    Record Engine Oil & Filter Service (5,000 KM)
-                  </h3>
-                  <p className="text-xs text-slate-600 mt-0.5">
-                    لاگ آئل سروس: اس گاڑی کا 5000 کلومیٹر سائیکل ری سیٹ ہو جائے گا
-                  </p>
-                </div>
-                <button
-                  onClick={() => setOilServiceModalVehicle(null)}
-                  className="text-slate-500 hover:text-slate-900 font-bold text-xs border border-slate-200 px-2.5 py-1.5 rounded-lg"
-                >
-                  ✕ Close
-                </button>
-              </div>
-
-              {/* Vehicle Context Header */}
-              <div className="p-3.5 bg-slate-900 text-white rounded-xl grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase">Vehicle Model</span>
-                  <strong className="text-white block">{oilServiceModalVehicle.model}</strong>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase">Plate Number</span>
-                  <strong className="text-white font-mono block">{oilServiceModalVehicle.plate}</strong>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase">Owner Investor</span>
-                  <strong className="text-white truncate block">{oilServiceModalVehicle.investorName}</strong>
-                </div>
-              </div>
-
-              <form onSubmit={handleQuickRecordOilService} className="space-y-4 text-xs font-serif">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1">
-                      Oil Service Odometer Reading (KM) *
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      required
-                      placeholder="e.g. 50000"
-                      value={oilServiceOdometer}
-                      onChange={(e) => setOilServiceOdometer(e.target.value)}
-                      className="w-full custom-input font-bold font-mono"
-                    />
-                    <span className="text-[10px] text-slate-500 mt-0.5 block">
-                      Current meter: {oilServiceModalVehicle.currentOdometer.toLocaleString()} KM
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1">
-                      Service Date *
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={oilServiceDate}
-                      onChange={(e) => setOilServiceDate(e.target.value)}
-                      className="w-full custom-input font-bold"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1">
-                      Workshop / Vendor Name (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Toyota Ravi Motors / Total Parco"
-                      value={oilServiceVendor}
-                      onChange={(e) => setOilServiceVendor(e.target.value)}
-                      className="w-full custom-input"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1">
-                      Oil & Filter Cost (Rs.) *
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      required
-                      placeholder="e.g. 12000"
-                      value={oilServiceCost}
-                      onChange={(e) => setOilServiceCost(e.target.value)}
-                      className="w-full custom-input font-bold font-mono"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">
-                    Oil Brand/Grade & Filter Details (Optional)
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="e.g. Mobil 1 5W-30 Full Synthetic, OEM oil filter & air filter replaced"
-                    value={oilServiceNotes}
-                    onChange={(e) => setOilServiceNotes(e.target.value)}
-                    className="w-full custom-input"
-                  />
-                </div>
-
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-950 text-[11px] space-y-0.5">
-                  <div className="font-bold">Lifecycle Reset Confirmation:</div>
-                  <div>
-                    Upon saving, this vehicle's 5,000 KM distance counter will reset to 0 KM. The next oil change will be scheduled at{' '}
-                    <strong className="font-mono">
-                      {((parseFloat(oilServiceOdometer) || oilServiceModalVehicle.currentOdometer) + 5000).toLocaleString()} KM
-                    </strong>.
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-                  <button
-                    type="button"
-                    onClick={() => setOilServiceModalVehicle(null)}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-lg transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="px-6 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg transition shadow-sm"
-                  >
-                    {isSaving ? 'Saving...' : 'Confirm Oil Service & Reset Interval'}
-                  </button>
-                </div>
-              </form>
-
-            </div>
-          </div>
-        )}
 
       </div>
     </div>
