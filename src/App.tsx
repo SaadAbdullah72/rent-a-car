@@ -723,7 +723,7 @@ export function App() {
             { label: 'CNIC Number', value: record.customerCnic },
             { label: 'Guarantor / Zamin', value: `${record.guarantorName || 'N/A'}${record.guarantorFatherName ? ` (S/O ${record.guarantorFatherName})` : ''}` },
             { label: 'Vehicle Rented', value: `${record.carNameModel} [${record.carPlateNumber}]` },
-            { label: 'Start Meter Reading', value: `${record.startOdometer?.toLocaleString()} KM (Limit: ${record.allowedKmThreshold} KM/day)` },
+            { label: 'Start Meter Reading', value: `${record.startOdometer?.toLocaleString()} KM (Limit: ${record.allowedKmThreshold?.toLocaleString()} KM)` },
             { label: 'Total Rent / Balance Due', value: `Rs. ${record.totalPrice.toLocaleString()} (Due: Rs. ${record.balanceDue.toLocaleString()})` },
             { label: 'Database Status', value: 'Saved & Verified in MongoDB' }
           ]
@@ -764,9 +764,7 @@ export function App() {
     }
 
     const totalKm = Math.max(0, endOdo - startOdo);
-    const dailyThreshold = returnModalRental.allowedKmThreshold !== undefined ? returnModalRental.allowedKmThreshold : 200;
-    const days = returnModalRental.totalDays || 1;
-    const totalAllowedKm = dailyThreshold * days;
+    const totalAllowedKm = returnModalRental.allowedKmThreshold !== undefined ? returnModalRental.allowedKmThreshold : 200;
     const extraKm = Math.max(0, totalKm - totalAllowedKm);
     const extraRate = returnModalRental.extraKmRate !== undefined ? returnModalRental.extraKmRate : 25;
     const extraSurcharge = extraKm * extraRate;
@@ -2464,7 +2462,7 @@ export function App() {
 
                   <div>
                     <label className="block text-slate-700 font-bold mb-1 font-serif">
-                      Daily Allowed KM Limit (Threshold) *
+                      Allowed KM Limit (کلومیٹر حد) *
                     </label>
                     <div className="relative">
                       <input
@@ -2475,14 +2473,14 @@ export function App() {
                         placeholder="e.g. 200"
                         value={custAllowedKmThreshold}
                         onChange={(e) => setCustAllowedKmThreshold(e.target.value)}
-                        className="w-full custom-input font-bold font-serif font-mono pr-16"
+                        className="w-full custom-input font-bold font-serif font-mono pr-12"
                       />
-                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-500">
-                        KM/Day
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-500 font-serif">
+                        KM
                       </span>
                     </div>
                     <span className="text-[10px] text-slate-500 mt-1 block font-serif">
-                      Total Limit: <strong className="text-slate-800 font-mono">{(parseFloat(custAllowedKmThreshold) || 200) * calculatedCustDays} KM</strong> for {calculatedCustDays} Days
+                      Extra surcharge applies if vehicle exceeds this limit
                     </span>
                   </div>
 
@@ -2501,12 +2499,12 @@ export function App() {
                         onChange={(e) => setCustExtraKmRate(e.target.value)}
                         className="w-full custom-input font-bold font-serif font-mono pr-16"
                       />
-                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-500">
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-500 font-serif">
                         Rs./KM
                       </span>
                     </div>
                     <span className="text-[10px] text-slate-500 mt-1 block font-serif">
-                      Auto-calculated upon vehicle return
+                      Charged per extra kilometer driven
                     </span>
                   </div>
                 </div>
@@ -2769,8 +2767,8 @@ export function App() {
                                 <div>
                                   <span className="text-slate-500">Start KM:</span> <strong className="font-mono">{r.startOdometer?.toLocaleString() || 0} KM</strong>
                                 </div>
-                                <div className="text-slate-500 text-[10px]">
-                                  Limit: {r.allowedKmThreshold || 200} KM/day ({totalAllowedKm} KM total)
+                                <div className="text-slate-600 text-[10px]">
+                                  Allowed Limit: <strong className="font-mono text-slate-800">{(r.allowedKmThreshold || 200).toLocaleString()} KM</strong>
                                 </div>
                                 <div className="text-[10px] text-amber-800 font-medium pt-0.5">
                                   ⏳ Vehicle on road
@@ -3828,7 +3826,7 @@ export function App() {
                         </strong>
                       </div>
                       <div className="text-slate-600 text-[11px]">
-                        Allowed Limit: <strong className="font-mono">{(selectedCustomerProfile.allowedKmThreshold || 200) * (selectedCustomerProfile.totalDays || 1)} KM</strong> ({selectedCustomerProfile.allowedKmThreshold || 200} KM/day)
+                        Allowed Limit: <strong className="font-mono text-slate-900">{(selectedCustomerProfile.allowedKmThreshold || 200).toLocaleString()} KM</strong>
                       </div>
                       {(selectedCustomerProfile.extraKmDriven || 0) > 0 && (
                         <div className="text-rose-800 font-bold bg-rose-50 border border-rose-200 p-1.5 rounded text-[11px]">
@@ -4336,9 +4334,7 @@ export function App() {
                               const end = parseFloat(e.target.value) || 0;
                               const start = editingModal.data.startOdometer || 0;
                               const driven = Math.max(0, end - start);
-                              const daily = editingModal.data.allowedKmThreshold || 200;
-                              const days = editingModal.data.totalDays || 1;
-                              const allowed = daily * days;
+                              const allowed = editingModal.data.allowedKmThreshold || 200;
                               const extraKm = Math.max(0, driven - allowed);
                               const rate = editingModal.data.extraKmRate || 25;
                               const extraCharges = extraKm * rate;
@@ -4361,7 +4357,7 @@ export function App() {
 
                       <div className="grid grid-cols-2 gap-3 font-serif">
                         <div>
-                          <label className="block text-slate-700 font-bold mb-1 font-serif">Daily Allowed Limit (KM/day)</label>
+                          <label className="block text-slate-700 font-bold mb-1 font-serif">Allowed KM Limit (KM)</label>
                           <input
                             type="number"
                             min="1"
@@ -4723,9 +4719,7 @@ export function App() {
           const startOdo = returnModalRental.startOdometer || 0;
           const endOdo = parseFloat(returnEndOdometer) || startOdo;
           const totalKm = Math.max(0, endOdo - startOdo);
-          const dailyThreshold = returnModalRental.allowedKmThreshold !== undefined ? returnModalRental.allowedKmThreshold : 200;
-          const days = returnModalRental.totalDays || 1;
-          const totalAllowedKm = dailyThreshold * days;
+          const totalAllowedKm = returnModalRental.allowedKmThreshold !== undefined ? returnModalRental.allowedKmThreshold : 200;
           const extraKm = Math.max(0, totalKm - totalAllowedKm);
           const extraRate = returnModalRental.extraKmRate !== undefined ? returnModalRental.extraKmRate : 25;
           const extraSurcharge = extraKm * extraRate;
@@ -4790,8 +4784,8 @@ export function App() {
                   <div className="p-4 bg-[#faf9f5] border border-slate-300 rounded-xl space-y-3">
                     <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide border-b border-slate-200 pb-1.5 flex items-center justify-between">
                       <span>1. Meter Readings & Mileage Inspection (میٹر ریڈنگ)</span>
-                      <span className="text-slate-500 font-normal text-[11px]">
-                        Allowed Limit: <strong>{totalAllowedKm} KM</strong> ({dailyThreshold} KM/day × {days} days)
+                      <span className="text-slate-600 font-bold text-[11px]">
+                        Allowed Limit: <strong className="text-slate-900 font-mono">{totalAllowedKm.toLocaleString()} KM</strong>
                       </span>
                     </h4>
 
