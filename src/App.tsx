@@ -499,43 +499,47 @@ export function App() {
     };
 
     setIsSaving(true);
+    try {
+      // 1. Save to MongoDB Cloud first
+      const result = await StorageService.saveInvestorToMongo(record);
 
-    // 1. OPTIMISTIC UI — add to local state + show success popup immediately
-    setInvestorRecords(prev => [record as any, ...prev]);
+      if (result.success) {
+        const savedRecord = result.data || record;
+        setInvestorRecords(prev => [savedRecord, ...prev]);
 
-    // 2. Clear form immediately so user can enter next record
-    setInvName('');
-    setInvCnic('');
-    setInvPhone('');
-    setInvVehicles([{
-      carNameModel: '', carPlateNumber: '', startDate: todayIso, endDate: todayIso,
-      totalDays: 1, payoutAmount: 0, advancePaid: 0, balanceDue: 0, paymentStatus: 'PENDING', notes: ''
-    }]);
+        // 2. Clear form only on successful database write
+        setInvName('');
+        setInvCnic('');
+        setInvPhone('');
+        setInvVehicles([{
+          carNameModel: '', carPlateNumber: '', startDate: todayIso, endDate: todayIso,
+          totalDays: 1, payoutAmount: 0, advancePaid: 0, balanceDue: 0, paymentStatus: 'PENDING', notes: ''
+        }]);
 
-    // 3. Show success popup RIGHT NOW (no waiting for DB)
-    setShowSuccessModal({
-      title: 'New Investor Registered Successfully!',
-      subtitle: 'Investor record and fleet deposit details have been recorded.',
-      targetTab: 'investor-directory',
-      details: [
-        { label: 'Investor Name', value: record.name },
-        { label: 'CNIC Number', value: record.cnic },
-        { label: 'Contact Phone', value: record.phone || 'N/A' },
-        { label: 'Registered Vehicles', value: `${record.vehicles.length} Vehicle(s) (${record.vehicles.map(v => `${v.carNameModel} [${v.carPlateNumber}]`).join(', ')})` }
-      ]
-    });
+        // 3. Show verified database success popup
+        setShowSuccessModal({
+          title: 'New Investor Registered in Database!',
+          subtitle: 'Investor record and fleet deposit have been verified and saved to MongoDB Cloud.',
+          targetTab: 'investor-directory',
+          details: [
+            { label: 'Investor Name', value: record.name },
+            { label: 'CNIC Number', value: record.cnic },
+            { label: 'Contact Phone', value: record.phone || 'N/A' },
+            { label: 'Registered Vehicles', value: `${record.vehicles.length} Vehicle(s) (${record.vehicles.map(v => `${v.carNameModel} [${v.carPlateNumber}]`).join(', ')})` },
+            { label: 'Database Status', value: 'Saved & Verified in MongoDB' }
+          ]
+        });
 
-    // 4. Save to MongoDB in background (user sees popup while this runs)
-    StorageService.saveInvestorToMongo(record)
-      .then(result => {
-        if (!result.success) {
-          showNotification(`DB Sync Warning: ${result.error}`, 'error');
-        }
-        // Silently refresh to get server-assigned _id
+        showNotification('New Investor successfully saved to Cloud Database!', 'success');
         refreshAllData().catch(() => {});
-      })
-      .catch(() => showNotification('Network error — record may not have saved.', 'error'))
-      .finally(() => setIsSaving(false));
+      } else {
+        showNotification(`Database Error: Could not save Investor. ${result.error || 'Check database connection.'}`, 'error');
+      }
+    } catch (err: any) {
+      showNotification(`Network/Server Error: ${err.message || 'Failed to connect to database.'}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Toggle Investor Vehicle Payment Status (PENDING <-> PAID FULL)
@@ -554,16 +558,26 @@ export function App() {
     };
 
     const updatedInv = { ...inv, vehicles: updatedVehicles };
-    await StorageService.updateInvestorToMongo(investorId, updatedInv);
-    await refreshAllData();
-    showNotification(`Payment status for ${current.carPlateNumber} marked as ${newStatus === 'PAID_FULL' ? 'PAID IN FULL' : 'PENDING'}.`);
+    const res = await StorageService.updateInvestorToMongo(investorId, updatedInv);
+    if (res.success) {
+      await refreshAllData();
+      showNotification(`Payment status for ${current.carPlateNumber} marked as ${newStatus === 'PAID_FULL' ? 'PAID IN FULL' : 'PENDING'} in Database.`, 'success');
+    } else {
+      showNotification(`Database Error: Failed to update payment status. ${res.error || ''}`, 'error');
+    }
   };
 
   const handleDeleteInvestor = async (id: string, name: string) => {
     if (window.confirm(`Delete investor record for "${name}" from MongoDB Cloud?`)) {
-      if (id) await StorageService.deleteInvestorFromMongo(id);
-      await refreshAllData();
-      showNotification(`Investor record "${name}" deleted.`);
+      if (id) {
+        const success = await StorageService.deleteInvestorFromMongo(id);
+        if (success) {
+          await refreshAllData();
+          showNotification(`Investor record "${name}" deleted from Database.`, 'success');
+        } else {
+          showNotification(`Database Error: Failed to delete investor "${name}".`, 'error');
+        }
+      }
     }
   };
 
@@ -613,37 +627,44 @@ export function App() {
     };
 
     setIsSaving(true);
+    try {
+      // 1. Save to MongoDB Cloud first
+      const result = await StorageService.saveCustomerRentalToMongo(record);
 
-    // OPTIMISTIC UI: add to local state immediately
-    setCustomerRentals(prev => [record as any, ...prev]);
+      if (result.success) {
+        const savedRental = result.data || record;
+        setCustomerRentals(prev => [savedRental, ...prev]);
 
-    // Clear form immediately
-    setCustName(''); setCustCnic(''); setCustPhone('');
-    setCustCarNameModel(''); setCustCarPlateNumber('');
-    setCustStartDate(todayIso); setCustEndDate(todayIso);
-    setCustTotalPrice(''); setCustAdvancePaid(''); setCustNotes('');
+        // 2. Clear form only on success
+        setCustName(''); setCustCnic(''); setCustPhone('');
+        setCustCarNameModel(''); setCustCarPlateNumber('');
+        setCustStartDate(todayIso); setCustEndDate(todayIso);
+        setCustTotalPrice(''); setCustAdvancePaid(''); setCustNotes('');
 
-    // Show success popup RIGHT NOW
-    setShowSuccessModal({
-      title: 'Customer Rental Booking Confirmed!',
-      subtitle: 'Vehicle rental agreement and customer balance ledger recorded.',
-      targetTab: 'customer-directory',
-      details: [
-        { label: 'Customer Name', value: record.customerName },
-        { label: 'CNIC Number', value: record.customerCnic },
-        { label: 'Vehicle Rented', value: `${record.carNameModel} [${record.carPlateNumber}]` },
-        { label: 'Total Rent / Balance Due', value: `Rs. ${record.totalPrice.toLocaleString()} (Due: Rs. ${record.balanceDue.toLocaleString()})` }
-      ]
-    });
+        // 3. Show verified database success popup
+        setShowSuccessModal({
+          title: 'Customer Rental Booking Saved in Database!',
+          subtitle: 'Vehicle rental agreement and customer balance ledger have been verified and saved to MongoDB Cloud.',
+          targetTab: 'customer-directory',
+          details: [
+            { label: 'Customer Name', value: record.customerName },
+            { label: 'CNIC Number', value: record.customerCnic },
+            { label: 'Vehicle Rented', value: `${record.carNameModel} [${record.carPlateNumber}]` },
+            { label: 'Total Rent / Balance Due', value: `Rs. ${record.totalPrice.toLocaleString()} (Due: Rs. ${record.balanceDue.toLocaleString()})` },
+            { label: 'Database Status', value: 'Saved & Verified in MongoDB' }
+          ]
+        });
 
-    // Save to MongoDB in background
-    StorageService.saveCustomerRentalToMongo(record)
-      .then(result => {
-        if (!result.success) showNotification(`DB Sync Warning: ${result.error}`, 'error');
+        showNotification('Customer Booking recorded successfully in Cloud Database!', 'success');
         refreshAllData().catch(() => {});
-      })
-      .catch(() => showNotification('Network error — record may not have saved.', 'error'))
-      .finally(() => setIsSaving(false));
+      } else {
+        showNotification(`Database Error: Could not save Booking. ${result.error || 'Check database connection.'}`, 'error');
+      }
+    } catch (err: any) {
+      showNotification(`Network/Server Error: ${err.message || 'Failed to connect to database.'}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Toggle Customer Rental Payment Status (PENDING <-> PAID FULL)
@@ -658,16 +679,26 @@ export function App() {
       balanceDue: newStatus === 'PAID_FULL' ? 0 : Math.max(0, rent.totalPrice - rent.advancePaid)
     };
 
-    await StorageService.updateCustomerRentalToMongo(rentalId, updatedRent);
-    await refreshAllData();
-    showNotification(`Payment status for customer ${rent.customerName} marked as ${newStatus === 'PAID_FULL' ? 'PAID IN FULL' : 'PENDING'}.`);
+    const res = await StorageService.updateCustomerRentalToMongo(rentalId, updatedRent);
+    if (res.success) {
+      await refreshAllData();
+      showNotification(`Payment status for customer ${rent.customerName} marked as ${newStatus === 'PAID_FULL' ? 'PAID IN FULL' : 'PENDING'} in Database.`, 'success');
+    } else {
+      showNotification(`Database Error: Failed to update payment status. ${res.error || ''}`, 'error');
+    }
   };
 
   const handleDeleteCustomerRental = async (id: string, name: string, plate: string) => {
     if (window.confirm(`Delete customer rental booking for "${name}" (${plate})?`)) {
-      if (id) await StorageService.deleteCustomerRentalFromMongo(id);
-      await refreshAllData();
-      showNotification(`Customer rental record for "${name}" deleted.`);
+      if (id) {
+        const success = await StorageService.deleteCustomerRentalFromMongo(id);
+        if (success) {
+          await refreshAllData();
+          showNotification(`Customer rental record for "${name}" deleted from Database.`, 'success');
+        } else {
+          showNotification(`Database Error: Failed to delete rental record for "${name}".`, 'error');
+        }
+      }
     }
   };
 
@@ -712,45 +743,58 @@ export function App() {
     };
 
     setIsSaving(true);
+    try {
+      // 1. Save to MongoDB Cloud first
+      const result = await StorageService.saveMaintenanceToMongo(log);
 
-    // OPTIMISTIC UI: add to local state immediately
-    setMaintenanceLogs(prev => [log as any, ...prev]);
+      if (result.success) {
+        const savedLog = result.data || log;
+        setMaintenanceLogs(prev => [savedLog, ...prev]);
 
-    // Clear form immediately
-    setMaintSelectedPlate(''); setMaintCarNameModel('');
-    setMaintServiceType('Oil & Filters Change'); setMaintCustomServiceType('');
-    setMaintServiceDate(todayIso); setMaintCost('');
-    setMaintVendorName(''); setMaintOdometer(''); setMaintDescription('');
+        // 2. Clear form only on success
+        setMaintSelectedPlate(''); setMaintCarNameModel('');
+        setMaintServiceType('Oil & Filters Change'); setMaintCustomServiceType('');
+        setMaintServiceDate(todayIso); setMaintCost('');
+        setMaintVendorName(''); setMaintOdometer(''); setMaintDescription('');
 
-    // Show success popup RIGHT NOW
-    setShowSuccessModal({
-      title: 'Vehicle Maintenance Log Saved!',
-      subtitle: 'Maintenance expense and service details have been logged.',
-      targetTab: 'maintenance-directory',
-      details: [
-        { label: 'Vehicle Plate', value: log.carPlateNumber },
-        { label: 'Service Category', value: log.serviceType },
-        { label: 'Total Expense Cost', value: `Rs. ${log.cost.toLocaleString()}` },
-        { label: 'Workshop Vendor', value: log.vendorName || 'N/A' }
-      ]
-    });
+        // 3. Show verified database success popup
+        setShowSuccessModal({
+          title: 'Vehicle Maintenance Log Saved in Database!',
+          subtitle: 'Maintenance expense and service details have been verified and saved to MongoDB Cloud.',
+          targetTab: 'maintenance-directory',
+          details: [
+            { label: 'Vehicle Plate', value: log.carPlateNumber },
+            { label: 'Service Category', value: log.serviceType },
+            { label: 'Total Expense Cost', value: `Rs. ${log.cost.toLocaleString()}` },
+            { label: 'Workshop Vendor', value: log.vendorName || 'N/A' },
+            { label: 'Database Status', value: 'Saved & Verified in MongoDB' }
+          ]
+        });
 
-    // Save to MongoDB in background
-    StorageService.saveMaintenanceToMongo(log)
-      .then(result => {
-        if (!result.success) showNotification(`DB Sync Warning: ${result.error}`, 'error');
+        showNotification('Maintenance log successfully saved to Cloud Database!', 'success');
         refreshAllData().catch(() => {});
-      })
-      .catch(() => showNotification('Network error — record may not have saved.', 'error'))
-      .finally(() => setIsSaving(false));
+      } else {
+        showNotification(`Database Error: Could not save Maintenance Log. ${result.error || 'Check database connection.'}`, 'error');
+      }
+    } catch (err: any) {
+      showNotification(`Network/Server Error: ${err.message || 'Failed to connect to database.'}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
 
   const handleDeleteMaintenanceLog = async (id: string, plate: string, service: string) => {
     if (window.confirm(`Delete maintenance log for "${plate}" (${service})?`)) {
-      if (id) await StorageService.deleteMaintenanceFromMongo(id);
-      await refreshAllData();
-      showNotification(`Maintenance log for "${plate}" deleted.`);
+      if (id) {
+        const success = await StorageService.deleteMaintenanceFromMongo(id);
+        if (success) {
+          await refreshAllData();
+          showNotification(`Maintenance log for "${plate}" deleted from Database.`, 'success');
+        } else {
+          showNotification(`Database Error: Failed to delete maintenance log.`, 'error');
+        }
+      }
     }
   };
 
@@ -762,33 +806,40 @@ export function App() {
     const { type, data } = editingModal;
     const id = data._id || data.id;
 
-    // Close modal immediately (optimistic)
-    setEditingModal(null);
+    setIsSaving(true);
+    try {
+      const syncPromise =
+        type === 'investor'    ? StorageService.updateInvestorToMongo(id, data) :
+        type === 'customer'    ? StorageService.updateCustomerRentalToMongo(id, data) :
+                                 StorageService.updateMaintenanceToMongo(id, data);
 
-    // Update local state optimistically
-    if (type === 'investor') {
-      setInvestorRecords(prev => prev.map(r => (r._id || r.id) === id ? { ...r, ...data } : r));
-    } else if (type === 'customer') {
-      setCustomerRentals(prev => prev.map(r => (r._id || r.id) === id ? { ...r, ...data } : r));
-    } else if (type === 'maintenance') {
-      setMaintenanceLogs(prev => prev.map(r => (r._id || r.id) === id ? { ...r, ...data } : r));
+      const result = await syncPromise;
+
+      if (result.success) {
+        // Close modal on verified success
+        setEditingModal(null);
+
+        // Update local state
+        if (type === 'investor') {
+          setInvestorRecords(prev => prev.map(r => (r._id || r.id) === id ? { ...r, ...data } : r));
+          showNotification(`Investor "${data.name}" updated successfully in Database!`, 'success');
+        } else if (type === 'customer') {
+          setCustomerRentals(prev => prev.map(r => (r._id || r.id) === id ? { ...r, ...data } : r));
+          showNotification(`Customer Rental for "${data.customerName}" updated successfully in Database!`, 'success');
+        } else if (type === 'maintenance') {
+          setMaintenanceLogs(prev => prev.map(r => (r._id || r.id) === id ? { ...r, ...data } : r));
+          showNotification(`Maintenance record for "${data.carPlateNumber}" updated successfully in Database!`, 'success');
+        }
+
+        await refreshAllData();
+      } else {
+        showNotification(`Database Error: Could not update record. ${result.error || 'Check database connection.'}`, 'error');
+      }
+    } catch (err: any) {
+      showNotification(`Network/Server Error: ${err.message || 'Failed to save changes to database.'}`, 'error');
+    } finally {
+      setIsSaving(false);
     }
-
-    // Show notification immediately
-    if (type === 'investor') showNotification(`Investor "${data.name}" updated!`);
-    else if (type === 'customer') showNotification(`Rental for "${data.customerName}" updated!`);
-    else if (type === 'maintenance') showNotification(`Maintenance record for "${data.carPlateNumber}" updated!`);
-
-    // Sync to DB in background
-    const syncPromise =
-      type === 'investor'    ? StorageService.updateInvestorToMongo(id, data) :
-      type === 'customer'    ? StorageService.updateCustomerRentalToMongo(id, data) :
-                               StorageService.updateMaintenanceToMongo(id, data);
-
-    syncPromise
-      .then(result => { if (!result.success) showNotification(`Sync warning: ${result.error}`, 'error'); })
-      .catch(() => showNotification('Network error during save.', 'error'))
-      .finally(() => refreshAllData().catch(() => {}));
   };
 
   // --- DATABASE BACKUP & RESTORE HANDLERS ---
