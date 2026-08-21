@@ -163,7 +163,7 @@ export const ClientListView: React.FC<ClientListViewProps> = ({
                       </div>
                       {client.guarantorAddress && (
                         <div className="text-[10px] text-slate-500 truncate" title={client.guarantorAddress}>
-                          📍 {client.guarantorAddress}
+                          Address: {client.guarantorAddress}
                         </div>
                       )}
                     </div>

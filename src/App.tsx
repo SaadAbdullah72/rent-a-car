@@ -2722,7 +2722,7 @@ export function App() {
                                 )}
                                 {r.guarantorAddress && (
                                   <div className="text-[10px] text-slate-500 truncate max-w-[180px]" title={r.guarantorAddress}>
-                                    📍 {r.guarantorAddress}
+                                    {r.guarantorAddress}
                                   </div>
                                 )}
                               </div>
@@ -2770,8 +2770,8 @@ export function App() {
                                 <div className="text-slate-600 text-[10px]">
                                   Allowed Limit: <strong className="font-mono text-slate-800">{(r.allowedKmThreshold || 200).toLocaleString()} KM</strong>
                                 </div>
-                                <div className="text-[10px] text-amber-800 font-medium pt-0.5">
-                                  ⏳ Vehicle on road
+                                <div className="text-[10px] text-slate-600 font-medium pt-0.5">
+                                  On Active Trip
                                 </div>
                               </div>
                             )}
@@ -2798,11 +2798,11 @@ export function App() {
                           <td className="p-3 border-r border-slate-200 font-serif space-y-1">
                             {r.isReturned ? (
                               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-300 block text-center">
-                                ✓ RETURNED
+                                RETURNED
                               </span>
                             ) : (
                               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 block text-center">
-                                ⏳ ON RENT
+                                ON RENT
                               </span>
                             )}
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold block text-center ${
@@ -2819,7 +2819,7 @@ export function App() {
                                   className="w-full px-2.5 py-1 text-[11px] font-bold bg-indigo-900 hover:bg-indigo-950 text-white rounded transition font-serif shadow-xs"
                                   title="Receive Vehicle Return and enter Return Meter Reading"
                                 >
-                                  🚗 Vehicle Returned
+                                  Vehicle Returned
                                 </button>
                               ) : (
                                 <button
@@ -2827,7 +2827,7 @@ export function App() {
                                   className="w-full px-2 py-0.5 text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded transition font-serif"
                                   title="View or update return meter readings"
                                 >
-                                  ⚙️ Meter Details
+                                  Meter Details
                                 </button>
                               )}
 
@@ -3781,7 +3781,7 @@ export function App() {
                   {/* Card 1: Vehicle & Schedule */}
                   <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-2 font-serif">
                     <div className="font-bold text-slate-900 text-sm font-serif border-b border-slate-100 pb-1.5">
-                      🚗 Vehicle Rented & Schedule
+                      Vehicle & Rental Schedule
                     </div>
                     <div>Model: <strong>{selectedCustomerProfile.carNameModel}</strong></div>
                     <div>Plate: <strong className="font-mono bg-slate-100 px-1.5 py-0.5 rounded">{selectedCustomerProfile.carPlateNumber}</strong></div>
@@ -3797,11 +3797,11 @@ export function App() {
                   {/* Card 2: Meter Reading & Mileage Inspection */}
                   <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-2 font-serif">
                     <div className="font-bold text-slate-900 text-sm font-serif border-b border-slate-100 pb-1.5 flex items-center justify-between">
-                      <span>📟 Meter & Mileage (میٹر)</span>
+                      <span>Meter & Mileage Record</span>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                         selectedCustomerProfile.isReturned ? 'bg-blue-100 text-blue-900' : 'bg-amber-100 text-amber-900'
                       }`}>
-                        {selectedCustomerProfile.isReturned ? '✓ Returned' : '⏳ On Road'}
+                        {selectedCustomerProfile.isReturned ? 'Returned' : 'On Road'}
                       </span>
                     </div>
 
@@ -3838,7 +3838,7 @@ export function App() {
                         onClick={() => openVehicleReturnModal(selectedCustomerProfile)}
                         className="w-full mt-2 px-2.5 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white rounded font-bold text-xs transition font-serif shadow-xs"
                       >
-                        {selectedCustomerProfile.isReturned ? '⚙️ Update Meter Readings' : '🚗 Record Vehicle Return'}
+                        {selectedCustomerProfile.isReturned ? 'Update Meter Readings' : 'Record Vehicle Return'}
                       </button>
                     </div>
                   </div>
@@ -3846,7 +3846,7 @@ export function App() {
                   {/* Card 3: Guarantor Verification */}
                   <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-2 font-serif">
                     <div className="font-bold text-slate-900 text-sm font-serif border-b border-slate-100 pb-1.5 flex items-center justify-between">
-                      <span>🛡️ Guarantor Details (ضامن)</span>
+                      <span>Guarantor & Reference Information</span>
                       {selectedCustomerProfile.guarantorName && (
                         <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded text-[10px] font-bold">
                           Verified
@@ -3881,7 +3881,7 @@ export function App() {
                   {/* Card 4: Financial Accounting */}
                   <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-2 font-serif">
                     <div className="font-bold text-slate-900 text-sm font-serif border-b border-slate-100 pb-1.5">
-                      💰 Financial Accounting
+                      Financial Accounting & Dues
                     </div>
                     <div>Total Rent Charged: <strong>Rs. {selectedCustomerProfile.totalPrice.toLocaleString()}</strong></div>
                     {(selectedCustomerProfile.extraKmCharges || 0) > 0 && (
@@ -4741,7 +4741,7 @@ export function App() {
                 <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                   <div>
                     <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
-                      <span>🚗 Vehicle Return & Meter Settlement</span>
+                      <span>Vehicle Return & Meter Settlement</span>
                     </h3>
                     <p className="text-xs text-slate-600 mt-0.5">
                       گاڑی کی واپسی وصولی، فائنل میٹر ریڈنگ اور اضافی کلومیٹر کا خودکار حساب
@@ -4943,7 +4943,7 @@ export function App() {
                       disabled={isSaving}
                       className="px-6 py-2.5 bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs rounded-lg transition shadow-md flex items-center gap-1.5"
                     >
-                      {isSaving ? 'Saving...' : '✓ Confirm Vehicle Return & Update Ledger'}
+                      {isSaving ? 'Saving...' : 'Confirm Vehicle Return & Update Ledger'}
                     </button>
                   </div>
                 </form>
