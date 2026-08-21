@@ -1871,12 +1871,12 @@ export function App() {
                 </div>
 
                 {investorFleetVehicles.length === 0 ? (
-                  <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-xl text-amber-950 text-xs font-serif space-y-1">
-                    <div className="font-bold text-sm text-amber-900 flex items-center gap-1.5">
-                      <span>⚠️</span> No Vehicles Registered in Investor Fleet!
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs font-serif space-y-1">
+                    <div className="font-bold text-xs text-amber-900">
+                      No Vehicles Registered in Investor Fleet
                     </div>
-                    <p>
-                      Customer ko gari book karwane ke liye pehle <strong>Tab 1 (+ Register Investor)</strong> mein jaa kar Investor aur uski Gari register karna lazmi hai.
+                    <p className="text-amber-800 text-[11px]">
+                      To allocate a vehicle to a customer booking, please register the investor and vehicle details first under the Investor Registration tab.
                     </p>
                   </div>
                 ) : custCarPlateNumber ? (
@@ -1884,16 +1884,15 @@ export function App() {
                   (() => {
                     const found = investorFleetVehicles.find(v => v.plate === custCarPlateNumber);
                     return (
-                      <div className="p-4 bg-emerald-50 border-2 border-emerald-400 rounded-xl space-y-3 font-serif shadow-xs">
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200 pb-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xl">✅</span>
-                            <div>
-                              <span className="font-bold text-slate-900 text-sm">{custCarNameModel || found?.model}</span>
-                              <span className="ml-2 px-2.5 py-0.5 bg-slate-900 text-white rounded font-bold text-xs uppercase tracking-wider">
-                                {custCarPlateNumber}
-                              </span>
-                            </div>
+                      <div className="p-4 bg-slate-900 text-white rounded-xl space-y-3 font-serif shadow-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                          <div className="flex items-center gap-2.5">
+                            <span className="px-2.5 py-0.5 bg-slate-800 border border-slate-700 text-emerald-400 font-mono font-bold text-xs rounded tracking-wider">
+                              {custCarPlateNumber}
+                            </span>
+                            <span className="font-bold text-white text-sm">
+                              {custCarNameModel || found?.model}
+                            </span>
                           </div>
 
                           <button
@@ -1902,30 +1901,30 @@ export function App() {
                               setCustCarPlateNumber('');
                               setCustCarNameModel('');
                             }}
-                            className="px-3 py-1 bg-white border border-emerald-400 text-emerald-950 hover:bg-emerald-100 rounded-lg text-xs font-bold font-serif transition shadow-xs flex items-center gap-1"
+                            className="px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-lg text-xs font-medium transition"
                           >
-                            <span>🔁</span> Change / Search Another Vehicle
+                            Change Vehicle
                           </button>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs">
-                          <div className="p-2 bg-white/80 border border-emerald-200 rounded-lg">
-                            <span className="text-slate-500 font-bold block text-[11px]">Deposited By Investor:</span>
-                            <span className="font-bold text-slate-900">{found?.investorName || 'Registered Investor'}</span>
+                          <div className="p-2.5 bg-slate-800/80 border border-slate-700/60 rounded-lg">
+                            <span className="text-slate-400 font-medium block text-[11px]">Assigned Investor:</span>
+                            <span className="font-bold text-white">{found?.investorName || 'Registered Investor'}</span>
                           </div>
-                          <div className="p-2 bg-white/80 border border-emerald-200 rounded-lg">
-                            <span className="text-slate-500 font-bold block text-[11px]">Investor CNIC:</span>
-                            <span className="font-bold text-slate-900">{found?.investorCnic || 'N/A'}</span>
+                          <div className="p-2.5 bg-slate-800/80 border border-slate-700/60 rounded-lg">
+                            <span className="text-slate-400 font-medium block text-[11px]">Investor CNIC:</span>
+                            <span className="font-bold text-white">{found?.investorCnic || 'N/A'}</span>
                           </div>
-                          <div className="p-2 bg-white/80 border border-emerald-200 rounded-lg">
-                            <span className="text-slate-500 font-bold block text-[11px]">Current Fleet Status:</span>
+                          <div className="p-2.5 bg-slate-800/80 border border-slate-700/60 rounded-lg">
+                            <span className="text-slate-400 font-medium block text-[11px]">Fleet Status:</span>
                             {found?.isCurrentlyRented ? (
-                              <span className="font-bold text-amber-800 flex items-center gap-1">
-                                <span>🟡</span> Currently on rental ({found.currentRentalCustomer})
+                              <span className="font-bold text-amber-400">
+                                Active Rental ({found.currentRentalCustomer})
                               </span>
                             ) : (
-                              <span className="font-bold text-emerald-800 flex items-center gap-1">
-                                <span>🟢</span> Available for Immediate Booking
+                              <span className="font-bold text-emerald-400">
+                                Available for Booking
                               </span>
                             )}
                           </div>
@@ -1941,10 +1940,10 @@ export function App() {
                       <div className="relative flex-1">
                         <input
                           type="text"
-                          placeholder="🔍 Search vehicle by Plate (e.g. LEA), Model (e.g. Corolla), or Investor Name..."
+                          placeholder="Search vehicle by plate, model, or investor name..."
                           value={custCarSearchQuery}
                           onChange={(e) => setCustCarSearchQuery(e.target.value)}
-                          className="w-full custom-input font-serif font-bold text-xs pl-3 pr-8"
+                          className="w-full custom-input font-serif font-medium text-xs pl-3 pr-8"
                         />
                         {custCarSearchQuery && (
                           <button
@@ -1962,7 +1961,7 @@ export function App() {
                         <button
                           type="button"
                           onClick={() => setCustCarAvailabilityFilter('all')}
-                          className={`px-2.5 py-1.5 rounded-lg font-bold transition text-xs ${
+                          className={`px-3 py-1.5 rounded-lg font-semibold transition text-xs ${
                             custCarAvailabilityFilter === 'all'
                               ? 'bg-slate-900 text-white shadow-xs'
                               : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
@@ -1974,25 +1973,25 @@ export function App() {
                         <button
                           type="button"
                           onClick={() => setCustCarAvailabilityFilter('available')}
-                          className={`px-2.5 py-1.5 rounded-lg font-bold transition text-xs flex items-center gap-1 ${
+                          className={`px-3 py-1.5 rounded-lg font-semibold transition text-xs ${
                             custCarAvailabilityFilter === 'available'
                               ? 'bg-emerald-800 text-white shadow-xs'
                               : 'bg-white border border-slate-300 text-emerald-800 hover:bg-emerald-50'
                           }`}
                         >
-                          <span>🟢</span> Available ({investorFleetVehicles.filter(v => !v.isCurrentlyRented).length})
+                          Available ({investorFleetVehicles.filter(v => !v.isCurrentlyRented).length})
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setCustCarAvailabilityFilter('rented')}
-                          className={`px-2.5 py-1.5 rounded-lg font-bold transition text-xs flex items-center gap-1 ${
+                          className={`px-3 py-1.5 rounded-lg font-semibold transition text-xs ${
                             custCarAvailabilityFilter === 'rented'
                               ? 'bg-amber-800 text-white shadow-xs'
                               : 'bg-white border border-slate-300 text-amber-800 hover:bg-amber-50'
                           }`}
                         >
-                          <span>🟡</span> On Rent ({investorFleetVehicles.filter(v => v.isCurrentlyRented).length})
+                          On Rent ({investorFleetVehicles.filter(v => v.isCurrentlyRented).length})
                         </button>
                       </div>
                     </div>
@@ -2001,39 +2000,39 @@ export function App() {
                     <div className="max-h-72 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                       {filteredInvestorFleet.length === 0 ? (
                         <div className="p-4 bg-white border border-slate-200 rounded-xl text-center text-slate-500 font-serif text-xs">
-                          No registered vehicles match your search "{custCarSearchQuery}". Clear search to view all cars.
+                          No registered vehicles match "{custCarSearchQuery}".
                         </div>
                       ) : (
                         filteredInvestorFleet.map((v, idx) => (
                           <div
                             key={idx}
-                            className="p-3.5 bg-white border border-slate-200 hover:border-indigo-400 rounded-xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition"
+                            className="p-3 bg-white border border-slate-200 hover:border-slate-400 rounded-xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition"
                           >
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
-                                <span className="px-2.5 py-0.5 rounded bg-slate-900 text-white font-bold text-xs uppercase tracking-wider">
+                                <span className="px-2.5 py-0.5 rounded bg-slate-900 text-white font-mono font-semibold text-xs tracking-wider">
                                   {v.plate}
                                 </span>
                                 <span className="font-bold text-slate-900 text-xs">
                                   {v.model}
                                 </span>
                                 {v.isCurrentlyRented ? (
-                                  <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">
-                                    🟡 On Rental
+                                  <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-semibold">
+                                    On Rental
                                   </span>
                                 ) : (
-                                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-bold">
-                                    🟢 Available Now
+                                  <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-semibold">
+                                    Available
                                   </span>
                                 )}
                               </div>
 
                               <div className="text-slate-600 text-[11px] flex flex-wrap items-center gap-x-3">
                                 <span>
-                                  <strong>Investor:</strong> {v.investorName} ({v.investorCnic})
+                                  <strong className="text-slate-700">Investor:</strong> {v.investorName} ({v.investorCnic})
                                 </span>
                                 {v.isCurrentlyRented && (
-                                  <span className="text-amber-800 font-semibold">
+                                  <span className="text-amber-800 font-medium">
                                     Rented to {v.currentRentalCustomer} ({v.currentRentalDates})
                                   </span>
                                 )}
@@ -2043,9 +2042,9 @@ export function App() {
                             <button
                               type="button"
                               onClick={() => handleSelectInvestorCarForRental(v.plate)}
-                              className="self-start sm:self-center px-4 py-1.5 bg-indigo-900 hover:bg-indigo-950 text-white font-bold text-xs rounded-lg transition shadow-xs flex items-center gap-1 shrink-0"
+                              className="self-start sm:self-center px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition shadow-xs shrink-0"
                             >
-                              <span>👉</span> Select This Car
+                              Select Vehicle
                             </button>
                           </div>
                         ))
