@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { InvestorRecord, VehicleItem, CustomerRentalRecord, VehicleMaintenanceLog, ActiveTab } from './types';
+import { InvestorRecord, VehicleItem, CustomerRentalRecord, VehicleMaintenanceLog, ActiveTab, VehicleOilStatus, OilServiceHealthStatus } from './types';
 import { StorageService, defaultSeedInvestors, defaultSeedCustomerRentals, defaultSeedMaintenance } from './services/storage';
 
 const SERVICE_OPTIONS = [
@@ -179,6 +179,15 @@ export function App() {
     details: { label: string; value: string }[];
   } | null>(null);
 
+  // --- 5,000 KM OIL CHANGE TRACKER STATE ---
+  const [oilTrackerFilter, setOilTrackerFilter] = useState<'ALL' | 'OVERDUE' | 'DUE_SOON' | 'HEALTHY'>('ALL');
+  const [oilTrackerSearch, setOilTrackerSearch] = useState<string>('');
+  const [oilServiceModalVehicle, setOilServiceModalVehicle] = useState<VehicleOilStatus | null>(null);
+  const [oilServiceDate, setOilServiceDate] = useState<string>(todayIso);
+  const [oilServiceOdometer, setOilServiceOdometer] = useState<string>('');
+  const [oilServiceCost, setOilServiceCost] = useState<string>('12000');
+  const [oilServiceVendor, setOilServiceVendor] = useState<string>('');
+  const [oilServiceNotes, setOilServiceNotes] = useState<string>('');
 
   // --- SAVING STATE (button spinner) ---
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -947,6 +956,55 @@ export function App() {
     }
   };
 
+  // --- 5,000 KM OIL SERVICE MODAL HANDLERS ---
+  const openQuickOilServiceModal = (item: VehicleOilStatus) => {
+    setOilServiceModalVehicle(item);
+    setOilServiceDate(todayIso);
+    setOilServiceOdometer(String(item.currentOdometer || 0));
+    setOilServiceCost('12000');
+    setOilServiceVendor('');
+    setOilServiceNotes('Mobil 1 5W-30 Synthetic engine oil & OEM filter replaced.');
+  };
+
+  const handleQuickRecordOilService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!oilServiceModalVehicle) return;
+
+    const odoNum = parseFloat(oilServiceOdometer) || oilServiceModalVehicle.currentOdometer;
+    const costNum = parseFloat(oilServiceCost) || 0;
+
+    const newMaintLog: VehicleMaintenanceLog = {
+      carPlateNumber: oilServiceModalVehicle.plate,
+      carNameModel: oilServiceModalVehicle.model,
+      serviceType: 'Oil & Filters Change',
+      customServiceType: '',
+      serviceDate: oilServiceDate || todayIso,
+      cost: costNum,
+      vendorName: oilServiceVendor || 'Authorized Service Workshop',
+      odometer: odoNum,
+      description: oilServiceNotes || 'Routine 5,000 KM engine oil and filter service completed.'
+    };
+
+    setIsSaving(true);
+    try {
+      const result = await StorageService.saveMaintenanceToMongo(newMaintLog);
+      if (result.success) {
+        showNotification(
+          `Oil Service Recorded for ${oilServiceModalVehicle.model} [${oilServiceModalVehicle.plate}] at ${odoNum.toLocaleString()} KM! Next service due at ${(odoNum + 5000).toLocaleString()} KM.`,
+          'success'
+        );
+        setOilServiceModalVehicle(null);
+        await refreshAllData();
+      } else {
+        showNotification(`Database Error: Could not log oil service. ${result.error || ''}`, 'error');
+      }
+    } catch (err: any) {
+      showNotification(`Server Error: ${err.message || ''}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // --- EDIT MODAL SAVE HANDLER ---
   const handleSaveEditModal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1264,6 +1322,116 @@ export function App() {
     return filteredMaintenanceLogs.reduce((sum, m) => sum + (m.cost || 0), 0);
   }, [filteredMaintenanceLogs]);
 
+  // --- 5,000 KM FLEET OIL CHANGE LIFECYCLE MATRIX ---
+  const fleetOilMatrix = useMemo<VehicleOilStatus[]>(() => {
+    return allFleetVehicles.map(v => {
+      const plateUpper = v.plate.trim().toUpperCase();
+
+      // Find Owner Investor if any
+      let invName = 'Direct Fleet';
+      let invCnic = '—';
+      for (const inv of investorRecords) {
+        if (inv.vehicles && inv.vehicles.some(iv => iv.carPlateNumber?.trim().toUpperCase() === plateUpper)) {
+          invName = inv.name;
+          invCnic = inv.cnic;
+          break;
+        }
+      }
+
+      // Find all customer rentals for this vehicle plate
+      const vehicleRentals = customerRentals.filter(
+        r => r.carPlateNumber?.trim().toUpperCase() === plateUpper
+      );
+
+      // Find all maintenance logs for this vehicle plate
+      const vehicleMaints = maintenanceLogs.filter(
+        m => m.carPlateNumber?.trim().toUpperCase() === plateUpper
+      );
+
+      // 1. Current Highest Odometer Reading across rentals & maintenance
+      let currentOdo = 0;
+      vehicleRentals.forEach(r => {
+        if (r.startOdometer && r.startOdometer > currentOdo) currentOdo = r.startOdometer;
+        if (r.endOdometer && r.endOdometer > currentOdo) currentOdo = r.endOdometer;
+      });
+      vehicleMaints.forEach(m => {
+        if (m.odometer && m.odometer > currentOdo) currentOdo = m.odometer;
+      });
+
+      // 2. Find Latest Oil Service Record
+      const oilMaints = vehicleMaints
+        .filter(m => m.serviceType && m.serviceType.toLowerCase().includes('oil'))
+        .sort((a, b) => new Date(b.serviceDate || '').getTime() - new Date(a.serviceDate || '').getTime());
+
+      const latestOilRecord = oilMaints[0];
+      const lastOilChangeOdometer = latestOilRecord?.odometer || 0;
+      const lastOilChangeDate = latestOilRecord?.serviceDate || 'Initial Setup';
+
+      // 3. Compute Distance Driven Since Last Oil Change
+      let kmSinceLast = 0;
+      if (lastOilChangeOdometer > 0 && currentOdo >= lastOilChangeOdometer) {
+        kmSinceLast = currentOdo - lastOilChangeOdometer;
+      } else if (lastOilChangeOdometer === 0 && currentOdo > 0) {
+        kmSinceLast = currentOdo % 5000;
+      }
+
+      const intervalKm = 5000;
+      const nextDueOdometer = (lastOilChangeOdometer > 0 ? lastOilChangeOdometer : Math.floor(currentOdo / 5000) * 5000) + intervalKm;
+      const kmRemaining = Math.max(0, intervalKm - kmSinceLast);
+      const progressPercent = Math.min(100, Math.round((kmSinceLast / intervalKm) * 100));
+
+      let status: OilServiceHealthStatus = 'HEALTHY';
+      if (kmSinceLast >= intervalKm) {
+        status = 'OVERDUE';
+      } else if (kmSinceLast >= 4500) {
+        status = 'DUE_SOON';
+      }
+
+      return {
+        plate: v.plate,
+        model: v.model,
+        investorName: invName,
+        investorCnic: invCnic,
+        currentOdometer: currentOdo,
+        lastOilChangeOdometer,
+        lastOilChangeDate,
+        kmSinceLastOilChange: kmSinceLast,
+        intervalKm,
+        nextDueOdometer,
+        kmRemaining,
+        progressPercent,
+        status
+      };
+    });
+  }, [allFleetVehicles, investorRecords, customerRentals, maintenanceLogs]);
+
+  // Filtered Oil Matrix by Status and Search Term
+  const filteredOilMatrix = useMemo(() => {
+    const q = oilTrackerSearch.toLowerCase().trim();
+    return fleetOilMatrix.filter(item => {
+      // Status Filter
+      if (oilTrackerFilter === 'OVERDUE' && item.status !== 'OVERDUE') return false;
+      if (oilTrackerFilter === 'DUE_SOON' && item.status !== 'DUE_SOON') return false;
+      if (oilTrackerFilter === 'HEALTHY' && item.status !== 'HEALTHY') return false;
+
+      // Search query
+      if (!q) return true;
+      return (
+        item.plate.toLowerCase().includes(q) ||
+        item.model.toLowerCase().includes(q) ||
+        item.investorName.toLowerCase().includes(q)
+      );
+    });
+  }, [fleetOilMatrix, oilTrackerFilter, oilTrackerSearch]);
+
+  const oilMatrixSummary = useMemo(() => {
+    const total = fleetOilMatrix.length;
+    const overdue = fleetOilMatrix.filter(i => i.status === 'OVERDUE').length;
+    const dueSoon = fleetOilMatrix.filter(i => i.status === 'DUE_SOON').length;
+    const healthy = fleetOilMatrix.filter(i => i.status === 'HEALTHY').length;
+    return { total, overdue, dueSoon, healthy };
+  }, [fleetOilMatrix]);
+
   return (
     <div className="relative min-h-screen text-slate-900 font-serif antialiased p-4 md:p-8">
       {/* Executive Rent-A-Car Atmosphere */}
@@ -1506,6 +1674,25 @@ export function App() {
                     Maintenance Directory ({maintenanceLogs.length})
                   </button>
                 </div>
+
+                <div className="h-6 w-px bg-slate-300 hidden sm:block" />
+
+                {/* 5,000 KM Oil Change Matrix Tab */}
+                <button
+                  onClick={() => setActiveTab('oil-tracker')}
+                  className={`nav-tab-btn px-3 py-1.5 rounded-lg border font-bold transition font-serif flex items-center gap-1.5 ${
+                    activeTab === 'oil-tracker' 
+                      ? 'bg-emerald-950 text-white border-emerald-950 shadow-sm' 
+                      : 'bg-emerald-50 border-emerald-300 text-emerald-950 hover:bg-emerald-100'
+                  }`}
+                >
+                  <span>Oil Change Tracker (5,000 KM)</span>
+                  {oilMatrixSummary.overdue > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-rose-700 text-white animate-pulse">
+                      {oilMatrixSummary.overdue} Overdue
+                    </span>
+                  )}
+                </button>
 
                 <div className="h-6 w-px bg-slate-300 hidden sm:block" />
 
@@ -3223,6 +3410,266 @@ export function App() {
           </main>
         )}
 
+        {/* TAB: 5,000 KM FLEET OIL CHANGE TRACKING & LIFECYCLE MATRIX */}
+        {activeTab === 'oil-tracker' && (
+          <main className="glass-panel p-6 rounded-xl space-y-6 font-serif animate-fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4 font-serif">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 font-serif">
+                  Fleet Engine Oil Change Matrix (5,000 KM Service Lifecycle)
+                </h2>
+                <p className="text-xs text-slate-600 mt-0.5 font-serif">
+                  خودکار مائلیج ٹریکر: کسٹمر بکنگز اور ریٹرن میٹر ریڈنگز کے تحت ہر 5000 کلومیٹر پر آئل چینج کا خودکار الرٹ
+                </p>
+              </div>
+
+              {/* Search Box */}
+              <div className="w-full sm:w-72">
+                <input
+                  type="text"
+                  placeholder="Search plate, model, investor..."
+                  value={oilTrackerSearch}
+                  onChange={(e) => setOilTrackerSearch(e.target.value)}
+                  className="w-full custom-input text-xs font-serif"
+                />
+              </div>
+            </div>
+
+            {/* Top Corporate KPI Metric Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-serif">
+              <div className="p-4 bg-[#faf9f5] border border-slate-200 rounded-lg font-serif">
+                <div className="text-xs text-slate-500 font-bold uppercase font-serif">Total Fleet Monitored</div>
+                <div className="text-2xl font-bold text-slate-900 mt-1 font-serif">{oilMatrixSummary.total} Vehicles</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Active investor & rental fleet</div>
+              </div>
+
+              <div className={`p-4 rounded-lg font-serif border ${
+                oilMatrixSummary.overdue > 0 
+                  ? 'bg-rose-50 border-rose-300 text-rose-950' 
+                  : 'bg-[#faf9f5] border-slate-200 text-slate-900'
+              }`}>
+                <div className="text-xs font-bold uppercase tracking-wide opacity-80">Overdue (5,000+ KM)</div>
+                <div className="text-2xl font-bold mt-1">{oilMatrixSummary.overdue} Vehicles</div>
+                <div className="text-[11px] mt-0.5 font-medium">Immediate oil service required</div>
+              </div>
+
+              <div className={`p-4 rounded-lg font-serif border ${
+                oilMatrixSummary.dueSoon > 0 
+                  ? 'bg-amber-50 border-amber-300 text-amber-950' 
+                  : 'bg-[#faf9f5] border-slate-200 text-slate-900'
+              }`}>
+                <div className="text-xs font-bold uppercase tracking-wide opacity-80">Due Soon (4,500 - 5,000 KM)</div>
+                <div className="text-2xl font-bold mt-1">{oilMatrixSummary.dueSoon} Vehicles</div>
+                <div className="text-[11px] mt-0.5 font-medium">Within next 500 KM threshold</div>
+              </div>
+
+              <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-lg text-emerald-950 font-serif">
+                <div className="text-xs font-bold uppercase tracking-wide opacity-80">Healthy Condition</div>
+                <div className="text-2xl font-bold mt-1">{oilMatrixSummary.healthy} Vehicles</div>
+                <div className="text-[11px] mt-0.5 font-medium">Optimal engine oil condition</div>
+              </div>
+            </div>
+
+            {/* Status Filter Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 font-serif">
+              <div className="flex items-center gap-1.5 bg-[#faf9f5] p-1 border border-slate-300 rounded-lg text-xs font-serif">
+                <button
+                  onClick={() => setOilTrackerFilter('ALL')}
+                  className={`px-3 py-1.5 rounded font-bold font-serif transition ${
+                    oilTrackerFilter === 'ALL' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-700 hover:text-slate-900'
+                  }`}
+                >
+                  All Vehicles ({oilMatrixSummary.total})
+                </button>
+
+                <button
+                  onClick={() => setOilTrackerFilter('OVERDUE')}
+                  className={`px-3 py-1.5 rounded font-bold font-serif transition ${
+                    oilTrackerFilter === 'OVERDUE' ? 'bg-rose-900 text-white shadow-xs' : 'text-rose-800 hover:bg-rose-100'
+                  }`}
+                >
+                  Overdue ({oilMatrixSummary.overdue})
+                </button>
+
+                <button
+                  onClick={() => setOilTrackerFilter('DUE_SOON')}
+                  className={`px-3 py-1.5 rounded font-bold font-serif transition ${
+                    oilTrackerFilter === 'DUE_SOON' ? 'bg-amber-800 text-white shadow-xs' : 'text-amber-800 hover:bg-amber-100'
+                  }`}
+                >
+                  Due Soon ({oilMatrixSummary.dueSoon})
+                </button>
+
+                <button
+                  onClick={() => setOilTrackerFilter('HEALTHY')}
+                  className={`px-3 py-1.5 rounded font-bold font-serif transition ${
+                    oilTrackerFilter === 'HEALTHY' ? 'bg-emerald-900 text-white shadow-xs' : 'text-emerald-800 hover:bg-emerald-100'
+                  }`}
+                >
+                  Healthy ({oilMatrixSummary.healthy})
+                </button>
+              </div>
+
+              <div className="text-xs text-slate-500 font-serif">
+                Showing <strong className="text-slate-800 font-mono">{filteredOilMatrix.length}</strong> of {fleetOilMatrix.length} fleet vehicles
+              </div>
+            </div>
+
+            {/* Matrix Data Table */}
+            {filteredOilMatrix.length === 0 ? (
+              <div className="p-12 text-center text-slate-500 text-xs bg-[#faf9f5] border border-slate-200 rounded-lg font-bold font-serif">
+                No fleet vehicles found matching the selected filter or search term.
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-slate-200 rounded-lg font-serif shadow-xs">
+                <table className="w-full text-left text-xs text-slate-900 border-collapse font-serif">
+                  <thead className="bg-[#faf9f5] border-b border-slate-300 font-bold text-slate-700 font-serif">
+                    <tr>
+                      <th className="p-3 border-r border-slate-200">#</th>
+                      <th className="p-3 border-r border-slate-200">Vehicle & Investor</th>
+                      <th className="p-3 border-r border-slate-200">Current Meter (KM)</th>
+                      <th className="p-3 border-r border-slate-200">Last Oil Service</th>
+                      <th className="p-3 border-r border-slate-200 min-w-[200px]">Distance Run (Since Oil Change)</th>
+                      <th className="p-3 border-r border-slate-200">Next Service Due</th>
+                      <th className="p-3 border-r border-slate-200">Service Status</th>
+                      <th className="p-3 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 font-serif bg-white">
+                    {filteredOilMatrix.map((item, idx) => {
+                      const isOverdue = item.status === 'OVERDUE';
+                      const isDueSoon = item.status === 'DUE_SOON';
+
+                      return (
+                        <tr 
+                          key={item.plate} 
+                          className={`hover:bg-slate-50 transition font-serif ${
+                            isOverdue ? 'bg-rose-50/40' : isDueSoon ? 'bg-amber-50/30' : ''
+                          }`}
+                        >
+                          <td className="p-3 border-r border-slate-200 text-slate-500 font-mono">
+                            {idx + 1}
+                          </td>
+
+                          <td className="p-3 border-r border-slate-200 font-serif">
+                            <div className="font-bold text-slate-900">{item.model}</div>
+                            <button
+                              onClick={() => {
+                                setSelectedLookupPlate(item.plate);
+                                setActiveTab('vehicle-360');
+                              }}
+                              className="font-mono text-xs font-bold text-indigo-900 hover:underline block mt-0.5"
+                            >
+                              [{item.plate}]
+                            </button>
+                            <span className="text-[10px] text-slate-500 block font-serif mt-0.5">
+                              Owner: {item.investorName}
+                            </span>
+                          </td>
+
+                          <td className="p-3 border-r border-slate-200 font-bold font-mono text-slate-900 font-serif text-sm">
+                            {item.currentOdometer.toLocaleString()} KM
+                          </td>
+
+                          <td className="p-3 border-r border-slate-200 text-[11px] font-serif space-y-0.5">
+                            <div>
+                              Meter: <strong className="font-mono text-slate-800">{item.lastOilChangeOdometer.toLocaleString()} KM</strong>
+                            </div>
+                            <div className="text-slate-500 text-[10px]">
+                              Date: {item.lastOilChangeDate}
+                            </div>
+                          </td>
+
+                          <td className="p-3 border-r border-slate-200 font-serif space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-bold font-mono text-slate-800">
+                                {item.kmSinceLastOilChange.toLocaleString()} / 5,000 KM
+                              </span>
+                              <span className={`text-[10px] font-bold ${
+                                isOverdue ? 'text-rose-800' : isDueSoon ? 'text-amber-800' : 'text-slate-600'
+                              }`}>
+                                {item.progressPercent}%
+                              </span>
+                            </div>
+
+                            {/* Formal Linear Progress Bar */}
+                            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-300 ${
+                                  isOverdue ? 'bg-rose-700' : isDueSoon ? 'bg-amber-600' : 'bg-emerald-700'
+                                }`}
+                                style={{ width: `${Math.min(100, item.progressPercent)}%` }}
+                              />
+                            </div>
+
+                            <div className="text-[10px] text-slate-500">
+                              {isOverdue ? (
+                                <span className="text-rose-800 font-bold">
+                                  +{(item.kmSinceLastOilChange - 5000).toLocaleString()} KM Exceeded
+                                </span>
+                              ) : (
+                                <span>{item.kmRemaining.toLocaleString()} KM Remaining</span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="p-3 border-r border-slate-200 font-serif">
+                            <div className="font-mono font-bold text-slate-800">
+                              {item.nextDueOdometer.toLocaleString()} KM
+                            </div>
+                            <span className="text-[10px] text-slate-500 block">
+                              Scheduled at +5,000 KM
+                            </span>
+                          </td>
+
+                          <td className="p-3 border-r border-slate-200 font-serif">
+                            {isOverdue && (
+                              <span className="px-2.5 py-1 rounded text-[10px] font-bold bg-rose-100 text-rose-900 border border-rose-300 block text-center">
+                                OVERDUE
+                              </span>
+                            )}
+                            {isDueSoon && (
+                              <span className="px-2.5 py-1 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 block text-center">
+                                DUE SOON
+                              </span>
+                            )}
+                            {!isOverdue && !isDueSoon && (
+                              <span className="px-2.5 py-1 rounded text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 block text-center">
+                                HEALTHY
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="p-3 text-center space-y-1 font-serif">
+                            <button
+                              onClick={() => openQuickOilServiceModal(item)}
+                              className="w-full px-2.5 py-1.5 text-[11px] font-bold bg-slate-900 hover:bg-slate-800 text-white rounded transition font-serif shadow-xs"
+                              title="Record engine oil and filter change service"
+                            >
+                              Record Oil Service
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setSelectedLookupPlate(item.plate);
+                                setActiveTab('vehicle-360');
+                              }}
+                              className="w-full px-2 py-0.5 text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded transition font-serif"
+                            >
+                              History
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+          </main>
+        )}
+
         {/* TAB 7: FINANCIAL PAYMENT AGENDA (TODAY / NEXT 2 DAYS / NEXT 3-5 DAYS / THIS WEEK) */}
         {activeTab === 'agenda' && (
           <main className="glass-panel p-6 rounded-xl space-y-6 font-serif animate-fade-in">
@@ -3432,11 +3879,31 @@ export function App() {
                       )}
                     </div>
 
-                    {/* Net Cashflow Card */}
-                    <div className="p-3 bg-white/10 border border-white/20 rounded-lg text-right font-serif">
-                      <div className="text-[10px] uppercase tracking-wider text-slate-300 font-bold font-serif">Net Profit / Cashflow</div>
-                      <div className={`text-xl font-bold font-serif ${lookupVehicleProfile.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        Rs. {lookupVehicleProfile.netProfit.toLocaleString()}
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Oil Change Health Indicator */}
+                      {(() => {
+                        const oilStat = fleetOilMatrix.find(o => o.plate.toUpperCase() === lookupVehicleProfile.plate.toUpperCase());
+                        if (!oilStat) return null;
+                        return (
+                          <div className="p-3 bg-white/10 border border-white/20 rounded-lg text-right font-serif">
+                            <div className="text-[10px] uppercase tracking-wider text-slate-300 font-bold font-serif">
+                              5,000 KM Oil Status
+                            </div>
+                            <div className={`text-xs font-bold font-serif mt-0.5 ${
+                              oilStat.status === 'OVERDUE' ? 'text-rose-400' : oilStat.status === 'DUE_SOON' ? 'text-amber-300' : 'text-emerald-400'
+                            }`}>
+                              {oilStat.kmSinceLastOilChange.toLocaleString()} / 5,000 KM ({oilStat.status})
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Net Cashflow Card */}
+                      <div className="p-3 bg-white/10 border border-white/20 rounded-lg text-right font-serif">
+                        <div className="text-[10px] uppercase tracking-wider text-slate-300 font-bold font-serif">Net Profit / Cashflow</div>
+                        <div className={`text-xl font-bold font-serif ${lookupVehicleProfile.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          Rs. {lookupVehicleProfile.netProfit.toLocaleString()}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -4952,6 +5419,156 @@ export function App() {
             </div>
           );
         })()}
+
+        {/* QUICK RECORD OIL SERVICE MODAL DIALOG */}
+        {oilServiceModalVehicle && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 font-serif">
+            <div className="bg-white border border-slate-300 rounded-2xl p-6 max-w-lg w-full max-h-[92vh] overflow-y-auto font-serif space-y-5 shadow-2xl">
+              
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-lg">
+                    Record Engine Oil & Filter Service (5,000 KM)
+                  </h3>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    لاگ آئل سروس: اس گاڑی کا 5000 کلومیٹر سائیکل ری سیٹ ہو جائے گا
+                  </p>
+                </div>
+                <button
+                  onClick={() => setOilServiceModalVehicle(null)}
+                  className="text-slate-500 hover:text-slate-900 font-bold text-xs border border-slate-200 px-2.5 py-1.5 rounded-lg"
+                >
+                  ✕ Close
+                </button>
+              </div>
+
+              {/* Vehicle Context Header */}
+              <div className="p-3.5 bg-slate-900 text-white rounded-xl grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase">Vehicle Model</span>
+                  <strong className="text-white block">{oilServiceModalVehicle.model}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase">Plate Number</span>
+                  <strong className="text-white font-mono block">{oilServiceModalVehicle.plate}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase">Owner Investor</span>
+                  <strong className="text-white truncate block">{oilServiceModalVehicle.investorName}</strong>
+                </div>
+              </div>
+
+              <form onSubmit={handleQuickRecordOilService} className="space-y-4 text-xs font-serif">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">
+                      Oil Service Odometer Reading (KM) *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      required
+                      placeholder="e.g. 50000"
+                      value={oilServiceOdometer}
+                      onChange={(e) => setOilServiceOdometer(e.target.value)}
+                      className="w-full custom-input font-bold font-mono"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">
+                      Current meter: {oilServiceModalVehicle.currentOdometer.toLocaleString()} KM
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">
+                      Service Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={oilServiceDate}
+                      onChange={(e) => setOilServiceDate(e.target.value)}
+                      className="w-full custom-input font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">
+                      Workshop / Vendor Name (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Toyota Ravi Motors / Total Parco"
+                      value={oilServiceVendor}
+                      onChange={(e) => setOilServiceVendor(e.target.value)}
+                      className="w-full custom-input"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">
+                      Oil & Filter Cost (Rs.) *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      required
+                      placeholder="e.g. 12000"
+                      value={oilServiceCost}
+                      onChange={(e) => setOilServiceCost(e.target.value)}
+                      className="w-full custom-input font-bold font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">
+                    Oil Brand/Grade & Filter Details (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. Mobil 1 5W-30 Full Synthetic, OEM oil filter & air filter replaced"
+                    value={oilServiceNotes}
+                    onChange={(e) => setOilServiceNotes(e.target.value)}
+                    className="w-full custom-input"
+                  />
+                </div>
+
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-950 text-[11px] space-y-0.5">
+                  <div className="font-bold">Lifecycle Reset Confirmation:</div>
+                  <div>
+                    Upon saving, this vehicle's 5,000 KM distance counter will reset to 0 KM. The next oil change will be scheduled at{' '}
+                    <strong className="font-mono">
+                      {((parseFloat(oilServiceOdometer) || oilServiceModalVehicle.currentOdometer) + 5000).toLocaleString()} KM
+                    </strong>.
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setOilServiceModalVehicle(null)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-lg transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-6 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-lg transition shadow-sm"
+                  >
+                    {isSaving ? 'Saving...' : 'Confirm Oil Service & Reset Interval'}
+                  </button>
+                </div>
+              </form>
+
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

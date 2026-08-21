@@ -89,6 +89,24 @@ export interface VehicleMaintenanceLog {
   createdAt?: string;
 }
 
+export type OilServiceHealthStatus = 'OVERDUE' | 'DUE_SOON' | 'HEALTHY';
+
+export interface VehicleOilStatus {
+  plate: string;
+  model: string;
+  investorName: string;
+  investorCnic: string;
+  currentOdometer: number;
+  lastOilChangeOdometer: number;
+  lastOilChangeDate: string;
+  kmSinceLastOilChange: number;
+  intervalKm: number; // default 5000
+  nextDueOdometer: number;
+  kmRemaining: number;
+  progressPercent: number;
+  status: OilServiceHealthStatus;
+}
+
 export type ActiveTab = 
   | 'investor-register' 
   | 'investor-directory' 
@@ -96,6 +114,7 @@ export type ActiveTab =
   | 'customer-directory' 
   | 'maintenance-register' 
   | 'maintenance-directory' 
+  | 'oil-tracker'
   | 'agenda'
   | 'vehicle-360'
   | 'investor-profile'
