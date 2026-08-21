@@ -1128,8 +1128,18 @@ export function App() {
 
         {/* VIEW MODE 1: EXECUTIVE LANDING PAGE - NO WHITE CARDS, DIRECT ON 8K BG IMAGE */}
         {viewMode === 'landing' && (
-          <div className="min-h-[80vh] flex flex-col items-center justify-center text-center space-y-8 animate-fade-in font-serif px-4 py-12">
+          <div className="min-h-[80vh] flex flex-col items-center justify-center text-center space-y-6 animate-fade-in font-serif px-4 py-12">
             
+            {/* Crystal Clear 3D Brand App Icon */}
+            <div className="relative group">
+              <div className="absolute -inset-1 bg-gradient-to-r from-amber-500/30 to-amber-200/30 rounded-3xl blur-lg opacity-70 group-hover:opacity-100 transition duration-500"></div>
+              <img
+                src="/app-icon.png"
+                alt="Al-Falah Luxury App Icon"
+                className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl shadow-2xl border border-amber-400/40 object-cover transform transition duration-300 hover:scale-105"
+              />
+            </div>
+
             <div className="space-y-4 max-w-3xl font-serif">
               <div className="text-xs uppercase tracking-widest text-slate-300 font-bold font-serif bg-slate-950/60 px-4 py-1.5 rounded-full inline-block border border-slate-700/60 backdrop-blur-md">
                 Al-Falah Rent A Car Portal
@@ -1149,7 +1159,7 @@ export function App() {
                 onClick={() => setShowLoginModal(true)}
                 className="btn-executive px-10 py-4 bg-slate-900/90 text-white border border-slate-700 font-bold text-base rounded-xl hover:bg-slate-900 transition duration-200 font-serif shadow-2xl backdrop-blur-md"
               >
-                Launch Software
+                Access System Management Portal
               </button>
             </div>
 
@@ -1159,31 +1169,31 @@ export function App() {
         {/* ADMIN LOGIN SECURITY MODAL */}
         {showLoginModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm font-serif animate-fade-in">
-            <div className="bg-white border border-slate-300 w-full max-w-md p-6 rounded-xl shadow-2xl space-y-5 font-serif">
+            <div className="bg-white border border-slate-300 w-full max-w-md p-6 rounded-xl shadow-2xl space-y-6 font-serif">
               <div className="border-b border-slate-200 pb-3 flex items-center justify-between font-serif">
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 font-serif">
-                    Al-Falah Rent A Car Admin Authentication
+                  <h3 className="text-lg font-bold text-slate-900 font-serif">
+                    System Administrator Login
                   </h3>
                   <p className="text-xs text-slate-500 font-serif">
-                    Enter administrator credentials to unlock system.
+                    Enter your verified administrator credentials to unlock portal.
                   </p>
                 </div>
                 <button
                   onClick={() => setShowLoginModal(false)}
                   className="text-slate-400 hover:text-slate-700 font-bold text-xs border border-slate-200 px-2 py-1 rounded font-serif"
                 >
-                  Close
+                  ✕
                 </button>
               </div>
 
               {loginError && (
-                <div className="p-3 bg-rose-50 border border-rose-300 text-rose-900 text-xs font-bold rounded-lg font-serif">
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-lg font-serif">
                   {loginError}
                 </div>
               )}
 
-              <form onSubmit={handleLoginSubmit} className="space-y-4 font-serif text-xs">
+              <form onSubmit={handleLoginSubmit} className="space-y-4 text-xs font-serif">
                 <div>
                   <label className="block text-slate-700 font-bold mb-1 font-serif">
                     Admin Username *
@@ -1191,10 +1201,10 @@ export function App() {
                   <input
                     type="text"
                     required
+                    placeholder="Enter admin username"
                     value={loginUsername}
                     onChange={(e) => setLoginUsername(e.target.value)}
-                    placeholder="Enter admin username"
-                    className="w-full custom-input font-serif font-bold"
+                    className="w-full custom-input font-bold font-serif"
                   />
                 </div>
 
@@ -1205,10 +1215,10 @@ export function App() {
                   <input
                     type="password"
                     required
+                    placeholder="Enter password"
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="Enter admin password"
-                    className="w-full custom-input font-serif font-bold"
+                    className="w-full custom-input font-bold font-serif"
                   />
                 </div>
 
@@ -1240,16 +1250,23 @@ export function App() {
             {/* Top Header Banner */}
             <header className="glass-panel p-6 rounded-xl font-serif">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 font-serif">
-                <div>
-                  <div className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-1 font-serif">
-                    Al-Falah Rent A Car System
+                <div className="flex items-center gap-4">
+                  <img
+                    src="/app-icon.png"
+                    alt="Al-Falah App Icon"
+                    className="w-14 h-14 rounded-xl shadow-md border border-amber-400/30 object-cover shrink-0"
+                  />
+                  <div>
+                    <div className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-0.5 font-serif">
+                      Al-Falah Rent A Car System
+                    </div>
+                    <h1 className="text-2xl font-bold text-slate-900 font-serif">
+                      Al-Falah Rent A Car - Enterprise Fleet, Rentals & Financial Ledger Portal
+                    </h1>
+                    <p className="text-xs text-slate-600 mt-0.5 font-serif">
+                      Full Financial Accounting, Multi-Vehicle Intake, Customer Rentals, Maintenance Logs & 360° History
+                    </p>
                   </div>
-                  <h1 className="text-2xl font-bold text-slate-900 font-serif">
-                    Al-Falah Rent A Car - Enterprise Fleet, Rentals & Financial Ledger Portal
-                  </h1>
-                  <p className="text-xs text-slate-600 mt-1 font-serif">
-                    Full Financial Accounting, Multi-Vehicle Intake, Customer Rentals, Maintenance Logs & 360° History
-                  </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 self-start md:self-center font-serif">
