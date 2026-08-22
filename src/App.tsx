@@ -3,7 +3,6 @@ import { InvestorRecord, VehicleItem, CustomerRentalRecord, VehicleMaintenanceLo
 import { StorageService, defaultSeedInvestors, defaultSeedCustomerRentals, defaultSeedMaintenance } from './services/storage';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 
 const SERVICE_OPTIONS = [
   'Oil & Filters Change',
@@ -1833,180 +1832,268 @@ export function App() {
     const { start, end, label } = reportDateRange;
     const data = reportFinancialData;
 
-    const wb = XLSX.utils.book_new();
+    const escapeXml = (str: any) => {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+    };
+
+    const renderCell = (val: any, styleId?: string, isNumber = false) => {
+      const type = isNumber || typeof val === 'number' ? 'Number' : 'String';
+      const styleAttr = styleId ? ` ss:StyleID="${styleId}"` : '';
+      return `<Cell${styleAttr}><Data ss:Type="${type}">${escapeXml(val)}</Data></Cell>`;
+    };
+
+    const renderRow = (cellsXml: string, styleId?: string) => {
+      const styleAttr = styleId ? ` ss:StyleID="${styleId}"` : '';
+      return `<Row${styleAttr}>${cellsXml}</Row>`;
+    };
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    xml += `<?mso-application progid="Excel.Sheet"?>\n`;
+    xml += `<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"\n`;
+    xml += ` xmlns:o="urn:schemas-microsoft-com:office:office"\n`;
+    xml += ` xmlns:x="urn:schemas-microsoft-com:office:excel"\n`;
+    xml += ` xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"\n`;
+    xml += ` xmlns:html="http://www.w3.org/TR/REC-html40">\n`;
+    xml += ` <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">\n`;
+    xml += `  <Author>Al-Falah Rent A Car</Author>\n`;
+    xml += `  <Created>${new Date().toISOString()}</Created>\n`;
+    xml += `  <Company>Al-Falah Luxury Fleet Management</Company>\n`;
+    xml += ` </DocumentProperties>\n`;
+    xml += ` <Styles>\n`;
+    xml += `  <Style ss:ID="Default" ss:Name="Normal">\n`;
+    xml += `   <Alignment ss:Vertical="Center"/>\n`;
+    xml += `   <Font ss:FontName="Calibri" ss:Size="10" ss:Color="#0F172A"/>\n`;
+    xml += `  </Style>\n`;
+    xml += `  <Style ss:ID="Title">\n`;
+    xml += `   <Font ss:FontName="Calibri" ss:Size="14" ss:Bold="1" ss:Color="#0F172A"/>\n`;
+    xml += `   <Alignment ss:Vertical="Center"/>\n`;
+    xml += `  </Style>\n`;
+    xml += `  <Style ss:ID="Header">\n`;
+    xml += `   <Font ss:FontName="Calibri" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/>\n`;
+    xml += `   <Interior ss:Color="#0F172A" ss:Pattern="Solid"/>\n`;
+    xml += `   <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>\n`;
+    xml += `  </Style>\n`;
+    xml += `  <Style ss:ID="Subtotal">\n`;
+    xml += `   <Font ss:FontName="Calibri" ss:Size="10" ss:Bold="1" ss:Color="#0F172A"/>\n`;
+    xml += `   <Interior ss:Color="#E2E8F0" ss:Pattern="Solid"/>\n`;
+    xml += `   <Alignment ss:Vertical="Center"/>\n`;
+    xml += `  </Style>\n`;
+    xml += `  <Style ss:ID="SubtotalNumber">\n`;
+    xml += `   <Font ss:FontName="Calibri" ss:Size="10" ss:Bold="1" ss:Color="#0F172A"/>\n`;
+    xml += `   <Interior ss:Color="#E2E8F0" ss:Pattern="Solid"/>\n`;
+    xml += `   <NumberFormat ss:Format="#,##0"/>\n`;
+    xml += `   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>\n`;
+    xml += `  </Style>\n`;
+    xml += `  <Style ss:ID="Number">\n`;
+    xml += `   <NumberFormat ss:Format="#,##0"/>\n`;
+    xml += `   <Alignment ss:Horizontal="Right" ss:Vertical="Center"/>\n`;
+    xml += `  </Style>\n`;
+    xml += `  <Style ss:ID="Center">\n`;
+    xml += `   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>\n`;
+    xml += `  </Style>\n`;
+    xml += ` </Styles>\n`;
 
     // Sheet 1: Executive Summary
-    const summaryData = [
-      ['AL-FALAH RENT A CAR - EXECUTIVE FINANCIAL STATEMENT'],
-      ['Generated On', new Date().toLocaleString()],
-      ['Report Time Lapse', label],
-      ['Date Range', `${start} to ${end}`],
-      ['Vehicle Filter', reportVehicleFilter],
-      ['Payment Filter', reportPaymentFilter],
-      [],
-      ['EXECUTIVE FINANCIAL METRICS', 'AMOUNT (PKR)'],
-      ['Gross Rental Turnover (Revenue Billed)', data.grossRentalRevenue],
-      ['Advance Cash Collected', data.advanceCashCollected],
-      ['Outstanding Customer Receivables (Balance Due)', data.accountsReceivableDue],
-      ['Extra KM Surcharges Incurred', data.totalExtraKmCharges],
-      ['Total Investor Fleet Liabilities', data.totalInvestorPayoutLiability],
-      ['Investor Advance Disbursed', data.investorAdvancePaid],
-      ['Investor Balance Payable', data.investorBalancePayable],
-      ['Total Workshop Maintenance Costs', data.totalMaintenanceExpenses],
-      ['Net Operating Profit (EBITDA)', data.netOperatingProfit],
-      ['Net Profit Margin (%)', `${data.profitMargin}%`],
-      ['Customer Dues Collection Rate (%)', `${data.collectionRate}%`],
-      ['Total Active Rentals Count', data.rentals.length],
-      ['Total Fleet Vehicles Count', data.vehicleMatrix.length]
-    ];
-    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-    wsSummary['!cols'] = [{ wch: 45 }, { wch: 25 }];
-    XLSX.utils.book_append_sheet(wb, wsSummary, 'Executive Summary');
+    xml += ` <Worksheet ss:Name="Executive Summary">\n  <Table ss:DefaultColumnWidth="160">\n`;
+    xml += `   <Column ss:Width="260"/>\n   <Column ss:Width="160"/>\n`;
+    xml += renderRow(renderCell('AL-FALAH RENT A CAR - EXECUTIVE FINANCIAL STATEMENT', 'Title')) + `\n`;
+    xml += renderRow(renderCell('Generated On') + renderCell(new Date().toLocaleString())) + `\n`;
+    xml += renderRow(renderCell('Report Period') + renderCell(label)) + `\n`;
+    xml += renderRow(renderCell('Date Range') + renderCell(`${start} to ${end}`)) + `\n`;
+    xml += renderRow(renderCell('Vehicle Filter') + renderCell(reportVehicleFilter)) + `\n`;
+    xml += renderRow(renderCell('Payment Filter') + renderCell(reportPaymentFilter)) + `\n`;
+    xml += renderRow('') + `\n`;
+    xml += renderRow(renderCell('EXECUTIVE FINANCIAL METRICS', 'Header') + renderCell('AMOUNT (PKR)', 'Header')) + `\n`;
+    xml += renderRow(renderCell('Gross Rental Turnover (Revenue Billed)') + renderCell(data.grossRentalRevenue, 'Number', true)) + `\n`;
+    xml += renderRow(renderCell('Advance Cash Collected') + renderCell(data.advanceCashCollected, 'Number', true)) + `\n`;
+    xml += renderRow(renderCell('Outstanding Customer Receivables (Balance Due)') + renderCell(data.accountsReceivableDue, 'Number', true)) + `\n`;
+    xml += renderRow(renderCell('Extra KM Surcharges Incurred') + renderCell(data.totalExtraKmCharges, 'Number', true)) + `\n`;
+    xml += renderRow(renderCell('Total Investor Fleet Liabilities') + renderCell(data.totalInvestorPayoutLiability, 'Number', true)) + `\n`;
+    xml += renderRow(renderCell('Investor Advance Disbursed') + renderCell(data.investorAdvancePaid, 'Number', true)) + `\n`;
+    xml += renderRow(renderCell('Investor Balance Payable') + renderCell(data.investorBalancePayable, 'Number', true)) + `\n`;
+    xml += renderRow(renderCell('Total Workshop Maintenance Costs') + renderCell(data.totalMaintenanceExpenses, 'Number', true)) + `\n`;
+    xml += renderRow(renderCell('Net Operating Profit (EBITDA)') + renderCell(data.netOperatingProfit, 'Number', true)) + `\n`;
+    xml += renderRow(renderCell('Net Profit Margin (%)') + renderCell(`${data.profitMargin}%`, 'Center')) + `\n`;
+    xml += renderRow(renderCell('Customer Collection Rate (%)') + renderCell(`${data.collectionRate}%`, 'Center')) + `\n`;
+    xml += renderRow(renderCell('Total Active Rentals Count') + renderCell(data.rentals.length, 'Number', true)) + `\n`;
+    xml += renderRow(renderCell('Total Fleet Vehicles Count') + renderCell(data.vehicleMatrix.length, 'Number', true)) + `\n`;
+    xml += `  </Table>\n </Worksheet>\n`;
 
     // Sheet 2: Customer Rentals
-    const rentalHeaders = [
-      'SR #', 'Customer Name', 'CNIC Number', 'Contact Phone', 'Guarantor Name', 'Guarantor Father Name', 'Guarantor CNIC', 'Vehicle Model', 'Plate Number', 'Start Date', 'End Date', 'Rental Days', 'Start KM', 'Return KM', 'Total KM Driven', 'Extra KM Surcharge (PKR)', 'Total Rental Price (PKR)', 'Advance Paid (PKR)', 'Balance Due (PKR)', 'Vehicle Return Status', 'Payment Status'
-    ];
-    const rentalRows: any[] = data.rentals.map((r, i) => [
-      i + 1,
-      r.customerName,
-      r.customerCnic,
-      r.customerPhone || '',
-      r.guarantorName || '',
-      r.guarantorFatherName || '',
-      r.guarantorCnic || '',
-      r.carNameModel,
-      r.carPlateNumber,
-      r.startDate,
-      r.endDate,
-      r.totalDays,
-      r.startOdometer || 0,
-      r.endOdometer || 0,
-      r.totalKmDriven || 0,
-      r.extraKmCharges || 0,
-      r.totalPrice || 0,
-      r.advancePaid || 0,
-      r.balanceDue || 0,
-      r.isReturned ? 'RETURNED' : 'ON RENT',
-      r.paymentStatus || 'PENDING'
-    ]);
+    xml += ` <Worksheet ss:Name="Customer Rentals">\n  <Table ss:DefaultColumnWidth="120">\n`;
+    xml += `   <Column ss:Width="40"/>\n   <Column ss:Width="140"/>\n   <Column ss:Width="120"/>\n   <Column ss:Width="100"/>\n   <Column ss:Width="130"/>\n   <Column ss:Width="130"/>\n   <Column ss:Width="120"/>\n   <Column ss:Width="160"/>\n   <Column ss:Width="100"/>\n   <Column ss:Width="80"/>\n   <Column ss:Width="80"/>\n   <Column ss:Width="60"/>\n   <Column ss:Width="70"/>\n   <Column ss:Width="70"/>\n   <Column ss:Width="80"/>\n   <Column ss:Width="110"/>\n   <Column ss:Width="100"/>\n   <Column ss:Width="100"/>\n   <Column ss:Width="100"/>\n   <Column ss:Width="90"/>\n   <Column ss:Width="90"/>\n`;
+    
+    const rHead = ['SR #', 'Customer Name', 'CNIC Number', 'Contact Phone', 'Guarantor Name', 'Guarantor Father Name', 'Guarantor CNIC', 'Vehicle Model', 'Plate Number', 'Start Date', 'End Date', 'Days', 'Start KM', 'Return KM', 'Total KM', 'Extra KM (PKR)', 'Total Rent (PKR)', 'Advance (PKR)', 'Balance (PKR)', 'Vehicle Status', 'Payment Status'];
+    xml += renderRow(rHead.map(h => renderCell(h, 'Header')).join('')) + `\n`;
+
+    data.rentals.forEach((r, i) => {
+      const rowCells = [
+        renderCell(i + 1, 'Center', true),
+        renderCell(r.customerName),
+        renderCell(r.customerCnic),
+        renderCell(r.customerPhone || '—'),
+        renderCell(r.guarantorName || '—'),
+        renderCell(r.guarantorFatherName || '—'),
+        renderCell(r.guarantorCnic || '—'),
+        renderCell(r.carNameModel),
+        renderCell(r.carPlateNumber),
+        renderCell(r.startDate),
+        renderCell(r.endDate),
+        renderCell(r.totalDays, 'Center', true),
+        renderCell(r.startOdometer || 0, 'Number', true),
+        renderCell(r.endOdometer || 0, 'Number', true),
+        renderCell(r.totalKmDriven || 0, 'Number', true),
+        renderCell(r.extraKmCharges || 0, 'Number', true),
+        renderCell(r.totalPrice || 0, 'Number', true),
+        renderCell(r.advancePaid || 0, 'Number', true),
+        renderCell(r.balanceDue || 0, 'Number', true),
+        renderCell(r.isReturned ? 'RETURNED' : 'ON RENT', 'Center'),
+        renderCell(r.paymentStatus || 'PENDING', 'Center')
+      ].join('');
+      xml += renderRow(rowCells) + `\n`;
+    });
+
     if (data.rentals.length > 0) {
-      rentalRows.push([
-        'TOTAL', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
-        data.totalExtraKmCharges,
-        data.grossRentalRevenue,
-        data.advanceCashCollected,
-        data.accountsReceivableDue,
-        '',
-        `${data.collectionRate}% Collected`
-      ]);
+      const subCells = [
+        renderCell('TOTAL', 'Subtotal'),
+        renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'),
+        renderCell(data.totalExtraKmCharges, 'SubtotalNumber', true),
+        renderCell(data.grossRentalRevenue, 'SubtotalNumber', true),
+        renderCell(data.advanceCashCollected, 'SubtotalNumber', true),
+        renderCell(data.accountsReceivableDue, 'SubtotalNumber', true),
+        renderCell('', 'Subtotal'),
+        renderCell(`${data.collectionRate}% Collected`, 'Subtotal')
+      ].join('');
+      xml += renderRow(subCells) + `\n`;
     }
-    const wsRentals = XLSX.utils.aoa_to_sheet([rentalHeaders, ...rentalRows]);
-    wsRentals['!cols'] = [
-      { wch: 6 }, { wch: 20 }, { wch: 18 }, { wch: 15 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 15 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 15 }
-    ];
-    XLSX.utils.book_append_sheet(wb, wsRentals, 'Customer Rentals');
+    xml += `  </Table>\n </Worksheet>\n`;
 
-    // Sheet 3: Investor Payouts
-    const invHeaders = [
-      'SR #', 'Investor Name', 'CNIC Number', 'Contact Phone', 'Vehicle Model', 'Plate Number', 'Start Date', 'End Date', 'Contract Days', 'Agreed Payout (PKR)', 'Advance Given (PKR)', 'Balance Payable (PKR)', 'Payment Status'
-    ];
-    const invRows: any[] = data.investorRows.map((item, i) => [
-      i + 1,
-      item.investorName,
-      item.investorCnic,
-      item.investorPhone || '',
-      item.vehicle.carNameModel,
-      item.vehicle.carPlateNumber,
-      item.vehicle.startDate,
-      item.vehicle.endDate,
-      item.vehicle.totalDays,
-      item.vehicle.payoutAmount || 0,
-      item.vehicle.advancePaid || 0,
-      item.vehicle.balanceDue || 0,
-      item.vehicle.paymentStatus || 'PENDING'
-    ]);
+    // Sheet 3: Investor Liabilities
+    xml += ` <Worksheet ss:Name="Investor Liabilities">\n  <Table ss:DefaultColumnWidth="120">\n`;
+    xml += `   <Column ss:Width="40"/>\n   <Column ss:Width="150"/>\n   <Column ss:Width="120"/>\n   <Column ss:Width="100"/>\n   <Column ss:Width="160"/>\n   <Column ss:Width="100"/>\n   <Column ss:Width="80"/>\n   <Column ss:Width="80"/>\n   <Column ss:Width="60"/>\n   <Column ss:Width="110"/>\n   <Column ss:Width="110"/>\n   <Column ss:Width="110"/>\n   <Column ss:Width="90"/>\n`;
+    const invHead = ['SR #', 'Investor Name', 'CNIC Number', 'Contact Phone', 'Vehicle Model', 'Plate Number', 'Start Date', 'End Date', 'Days', 'Agreed Payout (PKR)', 'Advance Given (PKR)', 'Balance Payable (PKR)', 'Payment Status'];
+    xml += renderRow(invHead.map(h => renderCell(h, 'Header')).join('')) + `\n`;
+
+    data.investorRows.forEach((item, i) => {
+      const rowCells = [
+        renderCell(i + 1, 'Center', true),
+        renderCell(item.investorName),
+        renderCell(item.investorCnic),
+        renderCell(item.investorPhone || '—'),
+        renderCell(item.vehicle.carNameModel),
+        renderCell(item.vehicle.carPlateNumber),
+        renderCell(item.vehicle.startDate),
+        renderCell(item.vehicle.endDate),
+        renderCell(item.vehicle.totalDays, 'Center', true),
+        renderCell(item.vehicle.payoutAmount || 0, 'Number', true),
+        renderCell(item.vehicle.advancePaid || 0, 'Number', true),
+        renderCell(item.vehicle.balanceDue || 0, 'Number', true),
+        renderCell(item.vehicle.paymentStatus || 'PENDING', 'Center')
+      ].join('');
+      xml += renderRow(rowCells) + `\n`;
+    });
+
     if (data.investorRows.length > 0) {
-      invRows.push([
-        'TOTAL', '', '', '', '', '', '', '', '',
-        data.totalInvestorPayoutLiability,
-        data.investorAdvancePaid,
-        data.investorBalancePayable,
-        'Verified'
-      ]);
+      const subCells = [
+        renderCell('TOTAL', 'Subtotal'),
+        renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'),
+        renderCell(data.totalInvestorPayoutLiability, 'SubtotalNumber', true),
+        renderCell(data.investorAdvancePaid, 'SubtotalNumber', true),
+        renderCell(data.investorBalancePayable, 'SubtotalNumber', true),
+        renderCell('Verified', 'Subtotal')
+      ].join('');
+      xml += renderRow(subCells) + `\n`;
     }
-    const wsInv = XLSX.utils.aoa_to_sheet([invHeaders, ...invRows]);
-    wsInv['!cols'] = [
-      { wch: 6 }, { wch: 20 }, { wch: 18 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 15 }
-    ];
-    XLSX.utils.book_append_sheet(wb, wsInv, 'Investor Liabilities');
+    xml += `  </Table>\n </Worksheet>\n`;
 
-    // Sheet 4: Maintenance Expenses
-    const maintHeaders = [
-      'SR #', 'Service Date', 'Vehicle Model', 'Plate Number', 'Service Category', 'Workshop / Vendor', 'Odometer Reading (KM)', 'Cost Incurred (PKR)', 'Work Details / Notes'
-    ];
-    const maintRows: any[] = data.maints.map((m, i) => [
-      i + 1,
-      m.serviceDate,
-      m.carNameModel,
-      m.carPlateNumber,
-      m.serviceType === 'Other' ? (m.customServiceType || 'Other') : m.serviceType,
-      m.vendorName || '',
-      m.odometer || 0,
-      m.cost || 0,
-      m.description || ''
-    ]);
+    // Sheet 4: Workshop Expenses
+    xml += ` <Worksheet ss:Name="Workshop Expenses">\n  <Table ss:DefaultColumnWidth="120">\n`;
+    xml += `   <Column ss:Width="40"/>\n   <Column ss:Width="80"/>\n   <Column ss:Width="160"/>\n   <Column ss:Width="100"/>\n   <Column ss:Width="160"/>\n   <Column ss:Width="140"/>\n   <Column ss:Width="90"/>\n   <Column ss:Width="110"/>\n   <Column ss:Width="220"/>\n`;
+    const maintHead = ['SR #', 'Date', 'Vehicle Model', 'Plate Number', 'Service Category', 'Workshop / Vendor', 'Odometer (KM)', 'Cost (PKR)', 'Notes / Description'];
+    xml += renderRow(maintHead.map(h => renderCell(h, 'Header')).join('')) + `\n`;
+
+    data.maints.forEach((m, i) => {
+      const rowCells = [
+        renderCell(i + 1, 'Center', true),
+        renderCell(m.serviceDate),
+        renderCell(m.carNameModel),
+        renderCell(m.carPlateNumber),
+        renderCell(m.serviceType === 'Other' ? (m.customServiceType || 'Other') : m.serviceType),
+        renderCell(m.vendorName || '—'),
+        renderCell(m.odometer || 0, 'Number', true),
+        renderCell(m.cost || 0, 'Number', true),
+        renderCell(m.description || '—')
+      ].join('');
+      xml += renderRow(rowCells) + `\n`;
+    });
+
     if (data.maints.length > 0) {
-      maintRows.push([
-        'TOTAL', '', '', '', '', '', '',
-        data.totalMaintenanceExpenses,
-        'Verified'
-      ]);
+      const subCells = [
+        renderCell('TOTAL', 'Subtotal'),
+        renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'), renderCell('', 'Subtotal'),
+        renderCell(data.totalMaintenanceExpenses, 'SubtotalNumber', true),
+        renderCell('Verified', 'Subtotal')
+      ].join('');
+      xml += renderRow(subCells) + `\n`;
     }
-    const wsMaint = XLSX.utils.aoa_to_sheet([maintHeaders, ...maintRows]);
-    wsMaint['!cols'] = [
-      { wch: 6 }, { wch: 14 }, { wch: 20 }, { wch: 15 }, { wch: 24 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 35 }
-    ];
-    XLSX.utils.book_append_sheet(wb, wsMaint, 'Workshop Expenses');
+    xml += `  </Table>\n </Worksheet>\n`;
 
     // Sheet 5: Vehicle ROI Matrix
-    const roiHeaders = [
-      'SR #', 'Vehicle Model', 'Plate Number', 'Total Bookings', 'Rental Inflow (PKR)', 'Investor Outflow (PKR)', 'Maintenance Cost (PKR)', 'Net Profit Margin (PKR)', 'Profit Margin %'
-    ];
-    const roiRows: any[] = data.vehicleMatrix.map((vm, i) => {
-      const marginPct = vm.rentalRevenue > 0 ? ((vm.netMargin / vm.rentalRevenue) * 100).toFixed(1) : '0.0';
-      return [
-        i + 1,
-        vm.model,
-        vm.plate,
-        vm.rentalCount,
-        vm.rentalRevenue,
-        vm.investorPayout,
-        vm.maintenanceCost,
-        vm.netMargin,
-        `${marginPct}%`
-      ];
-    });
-    if (data.vehicleMatrix.length > 0) {
-      roiRows.push([
-        'TOTAL', 'FLEET PERFORMANCE', '',
-        data.rentals.length,
-        data.grossRentalRevenue,
-        data.totalInvestorPayoutLiability,
-        data.totalMaintenanceExpenses,
-        data.netOperatingProfit,
-        `${data.profitMargin}%`
-      ]);
-    }
-    const wsRoi = XLSX.utils.aoa_to_sheet([roiHeaders, ...roiRows]);
-    wsRoi['!cols'] = [
-      { wch: 6 }, { wch: 22 }, { wch: 15 }, { wch: 15 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 15 }
-    ];
-    XLSX.utils.book_append_sheet(wb, wsRoi, 'Vehicle ROI Matrix');
+    xml += ` <Worksheet ss:Name="Vehicle ROI Matrix">\n  <Table ss:DefaultColumnWidth="130">\n`;
+    xml += `   <Column ss:Width="40"/>\n   <Column ss:Width="160"/>\n   <Column ss:Width="100"/>\n   <Column ss:Width="80"/>\n   <Column ss:Width="120"/>\n   <Column ss:Width="120"/>\n   <Column ss:Width="120"/>\n   <Column ss:Width="120"/>\n   <Column ss:Width="80"/>\n`;
+    const roiHead = ['SR #', 'Vehicle Model', 'Plate Number', 'Bookings', 'Rental Inflow (PKR)', 'Investor Outflow (PKR)', 'Maintenance Cost (PKR)', 'Net Profit Margin (PKR)', 'Margin %'];
+    xml += renderRow(roiHead.map(h => renderCell(h, 'Header')).join('')) + `\n`;
 
-    // Save Workbook as .xlsx
-    XLSX.writeFile(wb, `Al-Falah-Financial-Statement-${start}-to-${end}.xlsx`);
-    showNotification('Official Multi-Sheet Excel Workbook (.xlsx) downloaded successfully!', 'success');
+    data.vehicleMatrix.forEach((vm, i) => {
+      const marginPct = vm.rentalRevenue > 0 ? ((vm.netMargin / vm.rentalRevenue) * 100).toFixed(1) : '0.0';
+      const rowCells = [
+        renderCell(i + 1, 'Center', true),
+        renderCell(vm.model),
+        renderCell(vm.plate),
+        renderCell(vm.rentalCount, 'Center', true),
+        renderCell(vm.rentalRevenue, 'Number', true),
+        renderCell(vm.investorPayout, 'Number', true),
+        renderCell(vm.maintenanceCost, 'Number', true),
+        renderCell(vm.netMargin, 'Number', true),
+        renderCell(`${marginPct}%`, 'Center')
+      ].join('');
+      xml += renderRow(rowCells) + `\n`;
+    });
+
+    if (data.vehicleMatrix.length > 0) {
+      const subCells = [
+        renderCell('TOTAL', 'Subtotal'),
+        renderCell('FLEET PERFORMANCE', 'Subtotal'),
+        renderCell('', 'Subtotal'),
+        renderCell(data.rentals.length, 'SubtotalNumber', true),
+        renderCell(data.grossRentalRevenue, 'SubtotalNumber', true),
+        renderCell(data.totalInvestorPayoutLiability, 'SubtotalNumber', true),
+        renderCell(data.totalMaintenanceExpenses, 'SubtotalNumber', true),
+        renderCell(data.netOperatingProfit, 'SubtotalNumber', true),
+        renderCell(`${data.profitMargin}%`, 'Subtotal')
+      ].join('');
+      xml += renderRow(subCells) + `\n`;
+    }
+    xml += `  </Table>\n </Worksheet>\n`;
+
+    xml += `</Workbook>`;
+
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Al-Falah-Financial-Statement-${start}-to-${end}.xls`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showNotification('Official Multi-Sheet Excel Workbook (.xls) downloaded successfully!', 'success');
   };
 
   const handleDownloadFinancialCsv = () => {
@@ -4764,9 +4851,9 @@ export function App() {
                   <button
                     onClick={handleDownloadFinancialExcel}
                     className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded-lg transition shadow-md flex items-center gap-1.5 border border-emerald-700"
-                    title="Download Multi-Sheet Microsoft Excel Spreadsheet (.xlsx)"
+                    title="Download Multi-Sheet Microsoft Excel Spreadsheet"
                   >
-                    Download Excel Workbook (.xlsx)
+                    Download Excel Workbook (.xls)
                   </button>
 
                   <button

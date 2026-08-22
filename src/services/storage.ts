@@ -394,14 +394,26 @@ export const StorageService = {
 
   // ===== INVESTORS =====
   async fetchInvestorsFromMongo(): Promise<InvestorRecord[]> {
-    const res = await fetchWithRetry(`${API_BASE}/investors`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-      console.error('❌ fetchInvestors failed:', err);
-      throw new Error(err.error || 'Failed to fetch investors');
+    try {
+      const res = await fetchWithRetry(`${API_BASE}/investors`);
+      if (!res.ok) throw new Error('API response error');
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        try { localStorage.setItem('ALFALAH_CACHED_INVESTORS', JSON.stringify(data)); } catch {}
+        return data;
+      }
+      return defaultSeedInvestors;
+    } catch (err) {
+      console.warn('⚠️ fetchInvestors offline fallback active:', err);
+      try {
+        const cached = localStorage.getItem('ALFALAH_CACHED_INVESTORS');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+      return defaultSeedInvestors;
     }
-    const data = await res.json();
-    return Array.isArray(data) && data.length > 0 ? data : defaultSeedInvestors;
   },
 
   async saveInvestorToMongo(record: InvestorRecord): Promise<{ success: boolean; data?: any; error?: string }> {
@@ -446,14 +458,26 @@ export const StorageService = {
 
   // ===== CUSTOMER RENTALS =====
   async fetchCustomerRentalsFromMongo(): Promise<CustomerRentalRecord[]> {
-    const res = await fetchWithRetry(`${API_BASE}/customer-rentals`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-      console.error('❌ fetchCustomerRentals failed:', err);
-      throw new Error(err.error || 'Failed to fetch rentals');
+    try {
+      const res = await fetchWithRetry(`${API_BASE}/customer-rentals`);
+      if (!res.ok) throw new Error('API response error');
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        try { localStorage.setItem('ALFALAH_CACHED_RENTALS', JSON.stringify(data)); } catch {}
+        return data;
+      }
+      return defaultSeedCustomerRentals;
+    } catch (err) {
+      console.warn('⚠️ fetchCustomerRentals offline fallback active:', err);
+      try {
+        const cached = localStorage.getItem('ALFALAH_CACHED_RENTALS');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+      return defaultSeedCustomerRentals;
     }
-    const data = await res.json();
-    return Array.isArray(data) && data.length > 0 ? data : defaultSeedCustomerRentals;
   },
 
   async saveCustomerRentalToMongo(record: CustomerRentalRecord): Promise<{ success: boolean; data?: any; error?: string }> {
@@ -498,14 +522,26 @@ export const StorageService = {
 
   // ===== MAINTENANCE =====
   async fetchMaintenanceFromMongo(): Promise<VehicleMaintenanceLog[]> {
-    const res = await fetchWithRetry(`${API_BASE}/maintenance`);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-      console.error('❌ fetchMaintenance failed:', err);
-      throw new Error(err.error || 'Failed to fetch maintenance');
+    try {
+      const res = await fetchWithRetry(`${API_BASE}/maintenance`);
+      if (!res.ok) throw new Error('API response error');
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        try { localStorage.setItem('ALFALAH_CACHED_MAINTENANCE', JSON.stringify(data)); } catch {}
+        return data;
+      }
+      return defaultSeedMaintenance;
+    } catch (err) {
+      console.warn('⚠️ fetchMaintenance offline fallback active:', err);
+      try {
+        const cached = localStorage.getItem('ALFALAH_CACHED_MAINTENANCE');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+      return defaultSeedMaintenance;
     }
-    const data = await res.json();
-    return Array.isArray(data) && data.length > 0 ? data : defaultSeedMaintenance;
   },
 
   async saveMaintenanceToMongo(record: VehicleMaintenanceLog): Promise<{ success: boolean; data?: any; error?: string }> {

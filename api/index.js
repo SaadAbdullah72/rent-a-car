@@ -11,13 +11,34 @@ const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'falah87t';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'taxila3ee4';
 const JWT_SECRET     = process.env.JWT_SECRET     || 'alfalah_super_secure_2026';
 
-// ─── EXPRESS APP ─────────────────────────────────────────────────────────────
+// ─── EXPRESS APP & SECURITY HEADERS ───────────────────────────────────────────
 const app = express();
+
+// Security Response Headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
+
 app.use(cors({ origin: '*', methods: ['GET','POST','PUT','DELETE','OPTIONS'] }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '15mb' }));
 mongoose.set('bufferCommands', false);
 
-// ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
+// ─── AUTH HELPERS (Timing-safe comparison) ────────────────────────────────────
+function secureCompare(a, b) {
+  try {
+    const bufA = Buffer.from(String(a || ''));
+    const bufB = Buffer.from(String(b || ''));
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
+
 function generateToken(username) {
   const ts  = Date.now();
   const sig = crypto.createHash('sha256').update(`${username}:${ts}:${JWT_SECRET}`).digest('hex');
@@ -25,10 +46,12 @@ function generateToken(username) {
 }
 function verifyToken(token) {
   try {
+    if (!token || typeof token !== 'string') return false;
     const d = JSON.parse(Buffer.from(token, 'base64').toString());
+    if (!d || !d.ts || !d.username || !d.sig) return false;
     if (Date.now() - d.ts > 7 * 86400000) return false;
     const expected = crypto.createHash('sha256').update(`${d.username}:${d.ts}:${JWT_SECRET}`).digest('hex');
-    return d.sig === expected;
+    return secureCompare(d.sig, expected);
   } catch { return false; }
 }
 
@@ -113,11 +136,11 @@ const MaintenanceRecord = mongoose.models.MaintenanceRecord || mongoose.model('M
 global._mongooseCache = global._mongooseCache || { conn: null, promise: null };
 
 const MONGO_OPTIONS = {
-  serverSelectionTimeoutMS: 15000,
-  socketTimeoutMS:          45000,
-  connectTimeoutMS:         20000,
-  maxPoolSize:              10,
-  minPoolSize:              1,
+  serverSelectionTimeoutMS: 20000,
+  socketTimeoutMS:          60000,
+  connectTimeoutMS:         30000,
+  maxPoolSize:              20,
+  minPoolSize:              2,
   maxIdleTimeMS:            60000,
   heartbeatFrequencyMS:     10000,
   retryWrites:              true,
@@ -127,13 +150,13 @@ const MONGO_OPTIONS = {
 
 // Listeners to auto-heal disconnected state
 mongoose.connection.on('connected', () => {
-  console.log('✅ MongoDB connection established');
+  console.log('✅ MongoDB connection established and verified');
 });
 mongoose.connection.on('error', (err) => {
-  console.error('❌ MongoDB error:', err.message);
+  console.error('❌ MongoDB error caught:', err.message);
 });
 mongoose.connection.on('disconnected', () => {
-  console.warn('⚠️ MongoDB disconnected, resetting cached connection...');
+  console.warn('⚠️ MongoDB disconnected, clearing cached pool for fresh reconnect...');
   if (global._mongooseCache) {
     global._mongooseCache.conn = null;
     global._mongooseCache.promise = null;
@@ -216,16 +239,26 @@ async function requireDB(req, res, next) {
   }
 }
 
-// helper: strip mongo internals from update body
+// Robust NoSQL injection & prototype pollution sanitizer
 function sanitize(body) {
-  const d = { ...body };
-  delete d._id; delete d.__v; delete d.id;
+  if (!body || typeof body !== 'object') return {};
+  const d = {};
+  for (const key of Object.keys(body)) {
+    if (key.startsWith('$') || key.includes('.')) continue; // Strip operator injection
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue; // Strip prototype pollution
+    if (key === '_id' || key === '__v' || key === 'id') continue;
+    d[key] = body[key];
+  }
   return d;
 }
-// helper: build id query
-function idQuery(id) {
-  const parts = [{ id: id }];
-  if (mongoose.Types.ObjectId.isValid(id)) parts.push({ _id: id });
+
+// Secure ID query builder
+function idQuery(rawId) {
+  const cleanId = String(rawId || '').trim();
+  const parts = [{ id: cleanId }];
+  if (mongoose.Types.ObjectId.isValid(cleanId)) {
+    parts.push({ _id: new mongoose.Types.ObjectId(cleanId) });
+  }
   return { $or: parts };
 }
 
@@ -243,7 +276,11 @@ app.get('/api/health', async (req, res) => {
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ success: false, error: 'Username and password required.' });
-  if (String(username).trim() === ADMIN_USERNAME && String(password).trim() === ADMIN_PASSWORD) {
+  
+  const userMatch = secureCompare(String(username).trim(), ADMIN_USERNAME);
+  const passMatch = secureCompare(String(password).trim(), ADMIN_PASSWORD);
+
+  if (userMatch && passMatch) {
     return res.json({ success: true, token: generateToken(username), username });
   }
   return res.status(401).json({ success: false, error: 'Invalid credentials.' });
@@ -383,15 +420,30 @@ app.get('/api/backup/export', requireDB, async (req, res) => {
 
 app.post('/api/backup/restore', requireDB, async (req, res) => {
   try {
-    const { investors = [], customerRentals = [], maintenanceLogs = [] } = req.body;
+    const { investors = [], customerRentals = [], maintenanceLogs = [] } = req.body || {};
+    if (!Array.isArray(investors) || !Array.isArray(customerRentals) || !Array.isArray(maintenanceLogs)) {
+      return res.status(400).json({ error: 'Invalid backup file structure. Arrays expected for investors, rentals, and maintenance.' });
+    }
+    if (investors.length === 0 && customerRentals.length === 0 && maintenanceLogs.length === 0) {
+      return res.status(400).json({ error: 'Backup payload is empty. Restore aborted to prevent accidental data loss.' });
+    }
+
     await Promise.all([Investor.deleteMany({}), CustomerRental.deleteMany({}), MaintenanceRecord.deleteMany({})]);
     const [i, r, m] = await Promise.all([
       investors.length       ? Investor.insertMany(investors)               : [],
       customerRentals.length ? CustomerRental.insertMany(customerRentals)   : [],
       maintenanceLogs.length ? MaintenanceRecord.insertMany(maintenanceLogs): []
     ]);
-    res.json({ message: 'Restored!', counts: { investors: i.length, customerRentals: r.length, maintenanceLogs: m.length } });
+    res.json({ message: 'Restored successfully!', counts: { investors: i.length, customerRentals: r.length, maintenanceLogs: m.length } });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Process Resilience Handlers ──────────────────────────────────────────────
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
 });
 
 // ── Local dev server ──────────────────────────────────────────────────────────
